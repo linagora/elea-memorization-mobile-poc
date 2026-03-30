@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { Button, Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Button, Dimensions, ScrollView, StyleSheet, Text, View, Switch } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import {
@@ -8,12 +8,18 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import { useEffect, useRef, useState } from 'react';
+import WEBVIEW_CACHE_INJECTION_RAW from './webviewCacheInjection';
 
 const MEMORIZATION_URL = 'https://dev.elea.apps.education.fr/local/memorization/index.php';
+const MEMORIZATION_AJAX_URL = 'https://dev.elea.apps.education.fr/local/memorization/ajax/ajax.php';
 
 export default function App() {
   const [currentUrl, setCurrentUrl] = useState('');
   const [debugLogs, setDebugLogs] = useState([]);
+  const [forcedCache, setForcedCache] = useState(false);
+  const WEBVIEW_CACHE_INJECTION = WEBVIEW_CACHE_INJECTION_RAW
+    .replace('\${MEMORIZATION_AJAX_URL}', MEMORIZATION_AJAX_URL)
+    .replace('\${FORCED_CACHE}', forcedCache ? 'true' : 'false');
 
   const debugScrollView = useRef(null);
   const WebViewRef = useRef(null);
@@ -33,6 +39,17 @@ export default function App() {
     addDebugLog('App mounted');
   }, []);
 
+  useEffect(() => {
+    if (!WebViewRef.current) return;
+    WebViewRef.current.injectJavaScript(`
+      window.__memoForceCache = ${forcedCache ? 'true' : 'false'};
+      try {
+        window.ReactNativeWebView.postMessage('[CACHE] force cache ${forcedCache ? 'enabled' : 'disabled'}');
+      } catch (e) {}
+      true;
+    `);
+  }, [forcedCache]);
+
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
@@ -45,6 +62,24 @@ export default function App() {
             borderBottomColor: '#ccc',
           }}
         >
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 5,
+            }}
+          >
+            <Text style={{ fontSize: 16, marginRight: 10, flex: 1 }}>
+              Forcer le cache
+            </Text>
+            <Switch
+              value={forcedCache}
+              onValueChange={(value) => {
+                setForcedCache(value);
+              }}
+            />
+          </View>
           <View
             style={{
               flexDirection: 'row',
@@ -89,9 +124,15 @@ export default function App() {
             height: '100%',
           }}
           source={{ uri: MEMORIZATION_URL }}
+          injectedJavaScriptBeforeContentLoaded={WEBVIEW_CACHE_INJECTION}
           onNavigationStateChange={(navState) => {
             setCurrentUrl(navState.url);
             addDebugLog('Navigated to: ' + navState.url);
+          }}
+          onMessage={(event) => {
+            if (event?.nativeEvent?.data) {
+              addDebugLog(event.nativeEvent.data);
+            }
           }}
           ref={WebViewRef}
         />
@@ -105,7 +146,7 @@ export default function App() {
         >
           <ScrollView
             style={{
-              height: "100%",
+              height: '100%',
               flex: 1,
               width: '100%',
             }}
