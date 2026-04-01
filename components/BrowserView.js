@@ -1,11 +1,14 @@
 import { Button, Dimensions, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createWebviewCacheInjection } from '../webviewCacheInjection';
 import { createWebviewAutoLoginInjection } from '../webviewAutoLoginInjection';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const MEMORIZATION_URL = 'https://dev.elea.apps.education.fr/local/memorization/index.php';
+const MEMORIZATION_BASE_URL = 'https://dev.elea.apps.education.fr/';
+const MEMORIZATION_OFFLINE_HTML_KEY = '__memo_offline_html_v1__';
 const LOGIN_USERNAME = 'student@linagora.com';
 const LOGIN_PASSWORD = '***REMOVED***';
 
@@ -13,6 +16,8 @@ export default function BrowserView() {
   const [currentUrl, setCurrentUrl] = useState('');
   const [debugLogs, setDebugLogs] = useState([]);
   const [forceCache, setForceCache] = useState(false);
+  const [cachedOfflineHtml, setCachedOfflineHtml] = useState('');
+  const [webViewSource, setWebViewSource] = useState({ uri: MEMORIZATION_URL });
 
   const WEBVIEW_CACHE_INJECTION = createWebviewCacheInjection({
     forceCache,
@@ -42,13 +47,36 @@ export default function BrowserView() {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(MEMORIZATION_OFFLINE_HTML_KEY)
+      .then((html) => {
+        if (!mounted || !html) return;
+        setCachedOfflineHtml(html);
+        addDebugLog('[CACHE] Offline snapshot restored');
+      })
+      .catch(() => {
+        addDebugLog('[CACHE] Offline snapshot load failed');
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!WebViewRef.current) return;
     WebViewRef.current.injectJavaScript(`
       window.__memoForceCache = ${forceCache ? 'true' : 'false'};
       true;
     `);
     addDebugLog('[CACHE] Force cache ' + (forceCache ? 'enabled' : 'disabled'));
-  }, [forceCache]);
+    if (forceCache && cachedOfflineHtml) {
+      setWebViewSource({
+        html: cachedOfflineHtml,
+        baseUrl: MEMORIZATION_BASE_URL,
+      });
+      addDebugLog('[CACHE] Loaded offline snapshot');
+    }
+  }, [forceCache, cachedOfflineHtml]);
 
   const insets = useSafeAreaInsets();
 
@@ -72,8 +100,9 @@ export default function BrowserView() {
           width: Dimensions.get('window').width,
           height: '100%',
         }}
-        source={{ uri: MEMORIZATION_URL }}
+        source={webViewSource}
         injectedJavaScriptBeforeContentLoaded={WEBVIEW_INJECTION}
+        cacheEnabled
         onNavigationStateChange={(navState) => {
           setCurrentUrl(navState.url);
           addDebugLog('Navigated to: ' + navState.url);
@@ -81,7 +110,30 @@ export default function BrowserView() {
         onMessage={(event) => {
           const data = event?.nativeEvent?.data;
           if (!data) return;
+          if (data.startsWith('[OFFLINE_HTML] ')) {
+            const encoded = data.slice('[OFFLINE_HTML] '.length);
+            try {
+              const html = decodeURIComponent(encoded);
+              setCachedOfflineHtml(html);
+              AsyncStorage.setItem(MEMORIZATION_OFFLINE_HTML_KEY, html).catch(() => null);
+              addDebugLog('[CACHE] Offline snapshot saved');
+            } catch (e) {
+              addDebugLog('[CACHE] Offline snapshot decode failed');
+            }
+            return;
+          }
           addDebugLog(data);
+        }}
+        onError={() => {
+          if (!cachedOfflineHtml) {
+            addDebugLog('[CACHE] No offline snapshot available');
+            return;
+          }
+          setWebViewSource({
+            html: cachedOfflineHtml,
+            baseUrl: MEMORIZATION_BASE_URL,
+          });
+          addDebugLog('[CACHE] Network error, fallback to offline snapshot');
         }}
         onLoadEnd={() => {
           if (!WebViewRef.current) return;
@@ -92,7 +144,6 @@ export default function BrowserView() {
 
               style.type = 'text/css';
               if (style.styleSheet){
-                // This is required for IE8 and below.
                 style.styleSheet.cssText = css;
               } else {
                 style.appendChild(document.createTextNode(css));
@@ -149,11 +200,7 @@ export default function BrowserView() {
             }
           }} />
           <Button title='Mémorisation' onPress={() => {
-            if (WebViewRef.current) {
-              WebViewRef.current.injectJavaScript(`
-                window.location.href = '${MEMORIZATION_URL}';
-              `);
-            }
+            setWebViewSource({ uri: MEMORIZATION_URL });
           }} />
         </View>
         <Text
