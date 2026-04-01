@@ -1,15 +1,12 @@
-const WEBVIEW_CACHE_INJECTION_RAW = `(function() {
+const CACHE_INJECTION_SOURCE = `(function() {
   if (window.__memoCacheInstalled) return;
   window.__memoCacheInstalled = true;
 
-  var ENDPOINT = '\${MEMORIZATION_AJAX_URL}';
-  var FORCE_CACHE = \${FORCED_CACHE};
-  var CACHE_KEY = '__memo_cached_time__';
+  var ENDPOINT_PATH = '/local/memorization/ajax/ajax.php';
+  var CACHE_KEY = '__memo_last_date_string__';
+  var FORCE_CACHE = __FORCE_CACHE__;
   var originalFetch = window.fetch;
-  window.__memoForceCache =
-    typeof window.__memoForceCache === 'boolean'
-      ? window.__memoForceCache
-      : FORCE_CACHE;
+  window.__memoForceCache = typeof window.__memoForceCache === 'boolean' ? window.__memoForceCache : FORCE_CACHE;
 
   function post(msg) {
     try {
@@ -17,7 +14,23 @@ const WEBVIEW_CACHE_INJECTION_RAW = `(function() {
     } catch (e) {}
   }
 
-  function readCachedTime() {
+  function normalizeDateString(value) {
+    if (value === undefined || value === null) return '';
+    var raw = String(value).trim();
+    if (!raw) return '';
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    if (/^\\d{10}$/.test(raw)) {
+      var secDate = new Date(Number(raw) * 1000);
+      return secDate.getFullYear() + '/' + pad(secDate.getMonth() + 1) + '/' + pad(secDate.getDate()) + ' ' + pad(secDate.getHours()) + ':' + pad(secDate.getMinutes()) + ':' + pad(secDate.getSeconds());
+    }
+    if (/^\\d{13}$/.test(raw)) {
+      var msDate = new Date(Number(raw));
+      return msDate.getFullYear() + '/' + pad(msDate.getMonth() + 1) + '/' + pad(msDate.getDate()) + ' ' + pad(msDate.getHours()) + ':' + pad(msDate.getMinutes()) + ':' + pad(msDate.getSeconds());
+    }
+    return raw;
+  }
+
+  function readCachedDate() {
     try {
       return localStorage.getItem(CACHE_KEY) || '';
     } catch (e) {
@@ -25,86 +38,98 @@ const WEBVIEW_CACHE_INJECTION_RAW = `(function() {
     }
   }
 
-  function writeCachedTime(time) {
-    if (!time) return;
+  function writeCachedDate(value) {
+    var dateString = normalizeDateString(value);
+    if (!dateString) return '';
     try {
-      var value = String(time);
-      if (/^\\d{10}$/.test(value)) {
-        var d = new Date(Number(value) * 1000);
-        var pad = function(n) { return String(n).padStart(2, '0'); };
-        value =
-          d.getFullYear() + '/' +
-          pad(d.getMonth() + 1) + '/' +
-          pad(d.getDate()) + ' ' +
-          pad(d.getHours()) + ':' +
-          pad(d.getMinutes()) + ':' +
-          pad(d.getSeconds());
-      }
-      localStorage.setItem(CACHE_KEY, value);
+      localStorage.setItem(CACHE_KEY, dateString);
     } catch (e) {}
+    return dateString;
   }
 
-  function responseFromCache() {
-    var time = readCachedTime();
-    if (!time) return null;
-    return new Response(JSON.stringify({
-      success: true,
-      data: { time: time },
-      source: 'cache'
-    }), {
+  function extractDateFromBody(body) {
+    if (!body) return '';
+    try {
+      var text = typeof body === 'string' ? body : (typeof body.toString === 'function' ? body.toString() : '');
+      var params = new URLSearchParams(text);
+      return normalizeDateString(params.get('time') || params.get('date'));
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function extractDateFromJson(json) {
+    if (!json) return '';
+    if (typeof json === 'string') return normalizeDateString(json);
+    var candidates = [
+      json.time,
+      json.date,
+      json.value,
+      json.data && json.data.time,
+      json.data && json.data.date,
+      json.result && json.result.time,
+      json.result && json.result.date,
+    ];
+    for (var i = 0; i < candidates.length; i += 1) {
+      var normalized = normalizeDateString(candidates[i]);
+      if (normalized) return normalized;
+    }
+    return '';
+  }
+
+  function buildCacheResponse(method, dateString) {
+    if (!dateString) return null;
+    var payload = method === 'POST'
+      ? { success: true, result: 'OK', date: dateString, time: dateString }
+      : { success: true, date: dateString, time: dateString, data: { date: dateString, time: dateString } };
+    return new Response(JSON.stringify(payload), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
     });
   }
 
   window.fetch = async function(input, init) {
-    var url = typeof input === 'string' ? input : (input && input.url) ? input.url : '';
-    if (url.indexOf(ENDPOINT) !== 0) {
+    var requestUrl = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+    if (requestUrl.indexOf(ENDPOINT_PATH) === -1) {
       return originalFetch.apply(this, arguments);
     }
 
     var method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    var requestBody = init && init.body ? init.body : null;
 
     if (method === 'POST') {
-      try {
-        var body = init && init.body ? init.body : null;
-        if (body && typeof body.toString === 'function') {
-          var params = new URLSearchParams(body.toString());
-          var optimisticTime = params.get('time');
-          if (optimisticTime) {
-            writeCachedTime(optimisticTime);
-            post('SET local cache updated');
-          }
-        }
-      } catch (e) {}
+      var bodyDate = extractDateFromBody(requestBody);
+      if (bodyDate) {
+        writeCachedDate(bodyDate);
+        post('SET cached date=' + bodyDate);
+      }
     }
 
-    if (window.__memoForceCache) {
-      var forcedCached = responseFromCache();
-      if (forcedCached) {
-        post(method + ' forced cache, served from cache');
-        return forcedCached;
+    if (window.__memoForceCache === true) {
+      var forcedDate = readCachedDate();
+      if (forcedDate) {
+        post(method + ' forced cache hit');
+        return buildCacheResponse(method, forcedDate);
       }
-      post(method + ' forced cache enabled, no local cache');
+      post(method + ' forced cache miss');
     }
 
     try {
       var response = await originalFetch.apply(this, arguments);
-      var clone = response.clone();
       try {
-        var json = await clone.json();
-        var time = json && json.data ? json.data.time : null;
-        if (json && json.success === true && time) {
-          writeCachedTime(time);
-          post(method + ' network OK, cache synced');
+        var json = await response.clone().json();
+        var apiDate = extractDateFromJson(json);
+        if (apiDate) {
+          writeCachedDate(apiDate);
+          post(method + ' network synced date=' + apiDate);
         }
       } catch (e) {}
       return response;
     } catch (error) {
-      var cached = responseFromCache();
-      if (cached) {
-        post(method + ' network failed, served from cache');
-        return cached;
+      var fallbackDate = readCachedDate();
+      if (fallbackDate) {
+        post(method + ' network fallback cache hit');
+        return buildCacheResponse(method, fallbackDate);
       }
       throw error;
     }
@@ -112,4 +137,9 @@ const WEBVIEW_CACHE_INJECTION_RAW = `(function() {
 })();
 true;`;
 
-export default WEBVIEW_CACHE_INJECTION_RAW;
+export function createWebviewCacheInjection(config) {
+  var forceCache = config && config.forceCache === true;
+  return CACHE_INJECTION_SOURCE.replace('__FORCE_CACHE__', forceCache ? 'true' : 'false');
+}
+
+export default createWebviewCacheInjection;
