@@ -19,6 +19,7 @@ function tryServeForcedCache(runtime, method) {
 }
 
 async function trySyncDateFromNetwork(runtime, method, response) {
+  if (method !== 'GET') return;
   try {
     var json = await response.clone().json();
     var apiDate = runtime.extractDateFromJson(json);
@@ -39,12 +40,10 @@ export async function handleEndpointRequest(runtime, thisArg, args, input, init)
   var method = runtime.getRequestMethod(input, init);
   var requestBody = runtime.getRequestBody(init);
 
-  // Persist POST date values as soon as they are sent to keep cache up to date.
   if (method === 'POST') {
     trySyncDateFromPostBody(runtime, requestBody);
   }
 
-  // Optionally bypass network for deterministic offline/debug behavior.
   var forcedResponse = tryServeForcedCache(runtime, method);
   if (forcedResponse) return forcedResponse;
 
@@ -53,7 +52,6 @@ export async function handleEndpointRequest(runtime, thisArg, args, input, init)
     await trySyncDateFromNetwork(runtime, method, response);
     return response;
   } catch (error) {
-    // If network fails, serve the last known valid value.
     var fallbackResponse = tryFallbackToCache(runtime, method);
     if (fallbackResponse) return fallbackResponse;
     throw error;
