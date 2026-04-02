@@ -1,4 +1,5 @@
 import { Button, ScrollView, Switch, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function DevToolsPanel({
   forceCache,
@@ -11,14 +12,24 @@ export function DevToolsPanel({
   debugLogs,
   debugScrollView,
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <View
       style={{
-        width: '100%',
-        padding: 10,
-        backgroundColor: '#eee',
-        borderBottomWidth: 1,
-        borderBottomColor: '#ccc',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        backgroundColor: '#ffffff',
+        borderColor: '#00000040',
+        borderWidth: 1,
+        position: 'absolute',
+        bottom: 10 + insets.bottom,
+        left: 10,
+        right: 10,
+        zIndex: 9999,
+        boxShadow: '0px 1px 10px #00000040',
+        overflow: "visible",
+        borderRadius: 8,
       }}
     >
       <View
@@ -29,7 +40,7 @@ export function DevToolsPanel({
           marginBottom: 6,
         }}
       >
-        <Text style={{ fontSize: 14 }}>Force cache (offline)</Text>
+        <Text style={{ fontSize: 14, fontFamily: "Arial" }}>Force cache (offline)</Text>
         <Switch value={forceCache} onValueChange={onToggleForceCache} />
       </View>
       <View
@@ -40,12 +51,12 @@ export function DevToolsPanel({
           marginBottom: 5,
         }}
       >
-        <Button title="Retour" onPress={onGoBack} />
-        <Button title="Avance" onPress={onGoForward} />
-        <Button title="Rafraîchir" onPress={onReload} />
-        <Button title="Mémorisation" onPress={onOpenMemorization} />
+        <DevToolsButton title="Retour" onPress={onGoBack} />
+        <DevToolsButton title="Avance" onPress={onGoForward} />
+        <DevToolsButton title="Rafraîchir" onPress={onReload} />
+        <DevToolsButton title="Mémorisation" onPress={onOpenMemorization} />
       </View>
-      <Text style={{ fontSize: 16, textAlign: 'center' }} numberOfLines={1}>
+      <Text style={{ fontSize: 16, textAlign: 'center', fontFamily: "Arial" }} numberOfLines={1}>
         {currentUrl}
       </Text>
 
@@ -54,6 +65,9 @@ export function DevToolsPanel({
           height: 100,
           width: '100%',
           backgroundColor: '#222',
+          borderRadius: 6,
+          marginBottom: 4,
+          marginTop: 12,
         }}
       >
         <ScrollView
@@ -85,5 +99,19 @@ export function DevToolsPanel({
     </View>
   );
 }
+
+const DevToolsButton = ({ title, onPress }) => (
+  <Text
+    style={{
+      fontSize: 17,
+      color: '#007AFF',
+      padding: 8,
+      fontFamily: "Arial",
+    }}
+    onPress={onPress}
+  >
+    {title}
+  </Text>
+);
 
 export default DevToolsPanel;
