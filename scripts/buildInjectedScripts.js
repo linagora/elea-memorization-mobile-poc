@@ -14,7 +14,7 @@ const outputFile = path.join(
 );
 
 const entries = [
-  { exportName: 'CACHE_INJECTION_SCRIPT', entry: path.join(sourceRoot, 'cache', 'index.js') },
+  { exportName: 'CACHE_INJECTION_SCRIPT', entry: path.join(sourceRoot, 'index.js') },
   { exportName: 'AUTO_LOGIN_INJECTION_SCRIPT', entry: path.join(sourceRoot, 'autoLogin.js') },
   { exportName: 'MOBILE_INJECTION_SCRIPT', entry: path.join(sourceRoot, 'mobile.js') },
 ];
