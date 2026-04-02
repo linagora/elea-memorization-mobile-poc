@@ -18,6 +18,35 @@ export default function BrowserView() {
   const [forceCache, setForceCache] = useState(false);
   const [cachedOfflineHtml, setCachedOfflineHtml] = useState('');
   const [webViewSource, setWebViewSource] = useState({ uri: MEMORIZATION_URL });
+  const insets = useSafeAreaInsets();
+
+  const injectedStyleSheet = `
+    :root {
+      --inj-insets-top: ${insets.top}px;
+    }
+    .navbar.fixed-top {
+        padding-top: var(--inj-insets-top) !important;
+        height: calc(75px + var(--inj-insets-top)) !important;
+    }
+    #page {
+        margin-top: calc(75px + var(--inj-insets-top)) !important;
+    }
+
+    #native-mobile-devtools {
+      all: unset;
+      background: #351771;
+      color: #FFF;
+      height: 20px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-weight: 700;
+    }
+
+    .navbar.fixed-top .usermenu {
+      align-items: center;
+      justify-content: center;
+    }
+  `;
 
   const WEBVIEW_CACHE_INJECTION = createWebviewCacheInjection({
     forceCache,
@@ -26,7 +55,70 @@ export default function BrowserView() {
     username: LOGIN_USERNAME,
     password: LOGIN_PASSWORD,
   });
-  const WEBVIEW_INJECTION = `${WEBVIEW_AUTO_LOGIN_INJECTION}\n${WEBVIEW_CACHE_INJECTION}`;
+  const WEBVIEW_MOBILE_INJECTION = `
+    (function() {
+      var css = \`${injectedStyleSheet}\`;
+
+      function ensureViewport() {
+        var viewport = document.querySelector('meta[name="viewport"]');
+        if (!viewport) {
+          viewport = document.createElement('meta');
+          viewport.name = 'viewport';
+          document.head.appendChild(viewport);
+        }
+        viewport.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1');
+      }
+
+      function ensureStyle() {
+        var styleId = '__native_mobile_style__';
+        var style = document.getElementById(styleId);
+        if (!style) {
+          style = document.createElement('style');
+          style.id = styleId;
+          (document.head || document.documentElement).appendChild(style);
+        }
+        style.type = 'text/css';
+        style.textContent = css;
+      }
+
+      function ensureDevButton() {
+        var usermenu = document.querySelector('.navbar.fixed-top .usermenu');
+        if (!usermenu) return false;
+
+        if (!document.getElementById('native-mobile-devtools')) {
+          var button = document.createElement('button');
+          button.id = 'native-mobile-devtools';
+          button.textContent = 'DEV';
+          button.addEventListener('click', function() {
+            window.ReactNativeWebView.postMessage('[DEVTOOLS] Toggle dev tools');
+          });
+          usermenu.prepend(button);
+        }
+        return true;
+      }
+
+      function run() {
+        ensureViewport();
+        ensureStyle();
+        if (ensureDevButton()) return;
+
+        var observer = new MutationObserver(function() {
+          if (ensureDevButton()) observer.disconnect();
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        setTimeout(function() {
+          observer.disconnect();
+        }, 5000);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', run, { once: true });
+      } else {
+        run();
+      }
+    })();
+  `;
+  const WEBVIEW_INJECTION = `${WEBVIEW_AUTO_LOGIN_INJECTION}\n${WEBVIEW_CACHE_INJECTION}\n${WEBVIEW_MOBILE_INJECTION}`;
 
   const debugScrollView = useRef(null);
   const WebViewRef = useRef(null);
@@ -78,20 +170,7 @@ export default function BrowserView() {
     }
   }, [forceCache, cachedOfflineHtml]);
 
-  const insets = useSafeAreaInsets();
-
-  const injectedStyleSheet = `
-    :root {
-      --inj-insets-top: ${insets.top}px;
-    }
-    .navbar.fixed-top {
-        padding-top: var(--inj-insets-top) !important;
-        height: calc(75px + var(--inj-insets-top)) !important;
-    }
-    #page {
-        margin-top: calc(75px + var(--inj-insets-top)) !important;
-    }
-  `;
+  const [devToolsVisible, setDevToolsVisible] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -110,6 +189,10 @@ export default function BrowserView() {
         onMessage={(event) => {
           const data = event?.nativeEvent?.data;
           if (!data) return;
+          if (data === '[DEVTOOLS] Toggle dev tools') {
+            setDevToolsVisible((visible) => !visible);
+            return;
+          }
           if (data.startsWith('[OFFLINE_HTML] ')) {
             const encoded = data.slice('[OFFLINE_HTML] '.length);
             try {
@@ -135,24 +218,11 @@ export default function BrowserView() {
           });
           addDebugLog('[CACHE] Network error, fallback to offline snapshot');
         }}
-        onLoadEnd={() => {
-          if (!WebViewRef.current) return;
-          WebViewRef.current.injectJavaScript(`
-              let css = \`${injectedStyleSheet}\`; 
-              let style = document.createElement('style');
-              document.body.appendChild(style);
-
-              style.type = 'text/css';
-              if (style.styleSheet){
-                style.styleSheet.cssText = css;
-              } else {
-                style.appendChild(document.createTextNode(css));
-              }
-            `)
-        }}
         ref={WebViewRef}
+        bounce={false}
       />
 
+{devToolsVisible && (
       <View
         style={{
           width: '100%',
@@ -209,41 +279,42 @@ export default function BrowserView() {
         >
           {currentUrl}
         </Text>
-      </View>
 
-      <View
-        style={{
-          height: 100,
-          width: '100%',
-          backgroundColor: '#222',
-        }}
-      >
-        <ScrollView
+        <View
           style={{
-            height: '100%',
-            flex: 1,
+            height: 100,
             width: '100%',
+            backgroundColor: '#222',
           }}
-          contentContainerStyle={{
-            padding: 10,
-          }}
-          ref={debugScrollView}
         >
-          {debugLogs.map((log, index) => (
-            <Text
-              style={{
-                fontSize: 13,
-                width: '100%',
-                fontFamily: 'Menlo',
-                color: 'white',
-              }}
-              key={index}
-            >
-              {log}
-            </Text>
-          ))}
-        </ScrollView>
+          <ScrollView
+            style={{
+              height: '100%',
+              flex: 1,
+              width: '100%',
+            }}
+            contentContainerStyle={{
+              padding: 10,
+            }}
+            ref={debugScrollView}
+          >
+            {debugLogs.map((log, index) => (
+              <Text
+                style={{
+                  fontSize: 13,
+                  width: '100%',
+                  fontFamily: 'Menlo',
+                  color: 'white',
+                }}
+                key={index}
+              >
+                {log}
+              </Text>
+            ))}
+          </ScrollView>
+        </View>
       </View>
+    )}
     </View>
   );
 }
