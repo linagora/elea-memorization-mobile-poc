@@ -1,15 +1,15 @@
-const AUTO_LOGIN_INJECTION_SOURCE = `(function() {
+(function() {
   if (window.__memoAutoLoginInstalled) return;
   window.__memoAutoLoginInstalled = true;
 
   var loginPath = '/login/index.php';
   var targetPath = '/local/memorization/index.php';
-  var username = __LOGIN_USERNAME__;
-  var password = __LOGIN_PASSWORD__;
+  var username = window.__memoLoginUsername || '';
+  var password = window.__memoLoginPassword || '';
 
-  function post(msg) {
+  function post(message) {
     try {
-      window.ReactNativeWebView.postMessage('[LOGIN] ' + msg);
+      window.ReactNativeWebView.postMessage('[LOGIN] ' + message);
     } catch (e) {}
   }
 
@@ -58,19 +58,8 @@ const AUTO_LOGIN_INJECTION_SOURCE = `(function() {
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', loginWithRequest, {
-      once: true,
-    });
+    document.addEventListener('DOMContentLoaded', loginWithRequest, { once: true });
   } else {
     loginWithRequest();
   }
 })();
-true;`;
-
-export function createWebviewAutoLoginInjection(config) {
-  return AUTO_LOGIN_INJECTION_SOURCE
-    .replace('__LOGIN_USERNAME__', JSON.stringify(config?.username ?? ''))
-    .replace('__LOGIN_PASSWORD__', JSON.stringify(config?.password ?? ''));
-}
-
-export default createWebviewAutoLoginInjection;
