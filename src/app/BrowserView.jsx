@@ -14,7 +14,7 @@ import {
 import { createWebviewMobileInjection } from '../features/browser/createWebviewMobileInjection';
 import { useDebugLogs } from '../features/browser/useDebugLogs';
 import { useOfflineSnapshot } from '../features/browser/useOfflineSnapshot';
-import { DevToolsPanel } from '../features/browser/DevToolsPanel';
+import { DevToolsPanel } from '../components/DevToolsPanel';
 
 const OFFLINE_HTML_PREFIX = '[OFFLINE_HTML] ';
 
