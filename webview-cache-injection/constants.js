@@ -1,0 +1,1 @@
+export const FORCE_CACHE_PLACEHOLDER = '__FORCE_CACHE__';
