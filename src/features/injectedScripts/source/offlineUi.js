@@ -37,6 +37,7 @@ export function installOfflineUi() {
     }
 
     async function handleGet(event) {
+      if (!canInstallOfflineUi()) return;
       stopEvent(event);
       try {
         var response = await window.fetch(runtime.endpointPath, { method: 'GET', credentials: 'include' });
@@ -49,21 +50,12 @@ export function installOfflineUi() {
     }
 
     async function handleSet(event) {
+      if (!canInstallOfflineUi()) return;
       stopEvent(event);
       var dateString = runtime.normalizeDateString(Date.now());
       if (!dateString) return;
 
       runtime.writeCachedDate(dateString);
-      setContent(dateString);
-
-      try {
-        await window.fetch(runtime.endpointPath, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-          body: new URLSearchParams({ time: dateString }).toString(),
-        });
-      } catch (e) {}
     }
 
     nodes.getButton.addEventListener('click', handleGet, true);
