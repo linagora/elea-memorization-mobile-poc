@@ -17,7 +17,7 @@
     return window.location.pathname === loginPath;
   }
 
-  function loginWithRequest() {
+  async function loginWithRequest() {
     if (!shouldRun()) return;
     if (!username || !password) {
       post('missing credentials');
@@ -41,20 +41,19 @@
     body.set('username', username);
     body.set('password', password);
 
-    fetch('/login/index.php', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    })
-      .then(function() {
-        post('login request done, navigating');
-        window.location.href = targetPath;
-      })
-      .catch(function() {
-        window.__memoAutoLoginSubmitted = false;
-        post('login request failed');
+    try {
+      await fetch('/login/index.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
       });
+      post('login request done, navigating');
+      window.location.href = targetPath;
+    } catch (error) {
+      window.__memoAutoLoginSubmitted = false;
+      post('login request failed');
+    }
   }
 
   if (document.readyState === 'loading') {

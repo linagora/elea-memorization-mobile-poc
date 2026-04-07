@@ -1,8 +1,7 @@
-import { StyleSheet, View, StatusBar } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createWebviewCacheInjection, createWebviewAutoLoginInjection, createWebviewMobileInjection } from '../injections/webview';
+import { StatusBar, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 import {
   AUTO_LOGIN_ENABLED,
   LOGIN_PASSWORD,
@@ -12,10 +11,15 @@ import {
 } from '../browser/config';
 import { useDebugLogs, useOfflineSnapshot } from '../browser/hooks';
 import { DevToolsPanel } from './devToolsPanel';
+import {
+  createWebviewAutoLoginInjection,
+  createWebviewCacheInjection,
+  createWebviewMobileInjection,
+} from '../injections/webview';
 
 const OFFLINE_HTML_PREFIX = '[OFFLINE_HTML] ';
 
-export default function BrowserView() {
+export function BrowserView() {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
 
@@ -97,6 +101,14 @@ export default function BrowserView() {
     setWebViewSource({ uri: MEMORIZATION_URL });
   }, []);
 
+  const handleNavigationStateChange = useCallback(
+    (navState) => {
+      setCurrentUrl(navState.url);
+      addDebugLog(`Navigated to: ${navState.url}`);
+    },
+    [addDebugLog]
+  );
+
   const handleMessage = useCallback(
     (event) => {
       const data = event?.nativeEvent?.data;
@@ -148,6 +160,18 @@ export default function BrowserView() {
     webViewRef.current.injectJavaScript(webviewInjection);
   }, [webviewInjection]);
 
+  const handleGoBack = useCallback(() => {
+    webViewRef.current?.goBack();
+  }, []);
+
+  const handleGoForward = useCallback(() => {
+    webViewRef.current?.goForward();
+  }, []);
+
+  const handleReload = useCallback(() => {
+    webViewRef.current?.reload();
+  }, []);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle='dark-content' translucent />
@@ -157,10 +181,7 @@ export default function BrowserView() {
         injectedJavaScriptBeforeContentLoaded={webviewInjection}
         injectedJavaScript={webviewInjection}
         cacheEnabled
-        onNavigationStateChange={(navState) => {
-          setCurrentUrl(navState.url);
-          addDebugLog(`Navigated to: ${navState.url}`);
-        }}
+        onNavigationStateChange={handleNavigationStateChange}
         onMessage={handleMessage}
         onError={handleError}
         onLoadEnd={handleLoadEnd}
@@ -172,9 +193,9 @@ export default function BrowserView() {
         <DevToolsPanel
           forceCache={forceCache}
           onToggleForceCache={setForceCache}
-          onGoBack={() => webViewRef.current?.goBack()}
-          onGoForward={() => webViewRef.current?.goForward()}
-          onReload={() => webViewRef.current?.reload()}
+          onGoBack={handleGoBack}
+          onGoForward={handleGoForward}
+          onReload={handleReload}
           onOpenMemorization={handleOpenMemorization}
           currentUrl={currentUrl}
           debugLogs={debugLogs}

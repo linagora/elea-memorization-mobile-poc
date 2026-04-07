@@ -1,5 +1,4 @@
 function applyRuntimeConstants(runtime) {
-  // Centralize runtime keys and URL fragments used by all injected scripts.
   runtime.endpointPath = '/local/memorization/ajax/ajax.php';
   runtime.memorizationPath = '/local/memorization/index.php';
   runtime.cacheKey = '__memo_last_date_string__';
@@ -7,14 +6,12 @@ function applyRuntimeConstants(runtime) {
 }
 
 function createMessagingTools(runtime) {
-  // Post cache runtime logs back to React Native when the bridge is available.
   function post(message) {
     try {
       window.ReactNativeWebView.postMessage('[CACHE] ' + message);
     } catch (e) {}
   }
 
-  // Send URL-encoded offline HTML snapshots with a dedicated prefix.
   function postSnapshot(value) {
     try {
       window.ReactNativeWebView.postMessage(runtime.snapshotMessagePrefix + value);
@@ -28,14 +25,12 @@ function createMessagingTools(runtime) {
 }
 
 function initializeForceCacheFlag() {
-  // Preserve a previous explicit value and otherwise default to false.
   var forceCacheFromConfig = window.__memoForceCache === true;
   window.__memoForceCache =
     typeof window.__memoForceCache === 'boolean' ? window.__memoForceCache : forceCacheFromConfig;
 }
 
 function createDateCacheTools(runtime) {
-  // Format dates in the same string format expected by the memorization endpoint.
   function formatDate(date) {
     var pad = function(n) {
       return String(n).padStart(2, '0');
@@ -56,7 +51,6 @@ function createDateCacheTools(runtime) {
     );
   }
 
-  // Normalize all date-like values to a stable string before caching.
   function normalizeDateString(value) {
     if (value === undefined || value === null) return '';
     var raw = String(value).trim();
@@ -66,7 +60,6 @@ function createDateCacheTools(runtime) {
     return raw;
   }
 
-  // Read and write cached date values with localStorage safety guards.
   function readCachedDate() {
     try {
       return localStorage.getItem(runtime.cacheKey) || '';
@@ -84,7 +77,6 @@ function createDateCacheTools(runtime) {
     return normalized;
   }
 
-  // Extract memo date values from form-encoded request bodies.
   function extractDateFromBody(body) {
     if (!body) return '';
 
@@ -97,7 +89,6 @@ function createDateCacheTools(runtime) {
     }
   }
 
-  // Extract memo date values from known API response payload shapes.
   function extractDateFromJson(json) {
     if (!json) return '';
     if (typeof json === 'string') return normalizeDateString(json);
@@ -131,7 +122,6 @@ function createDateCacheTools(runtime) {
 }
 
 function createRequestTools(runtime) {
-  // Build API-compatible JSON responses from the cached date.
   function buildCacheResponse(method, dateString) {
     if (!dateString) return null;
 
@@ -146,7 +136,6 @@ function createRequestTools(runtime) {
     });
   }
 
-  // Normalize fetch request inputs into reusable helpers.
   function getRequestUrl(input) {
     if (typeof input === 'string') return input;
     if (input && input.url) return input.url;
@@ -179,7 +168,6 @@ function createRequestTools(runtime) {
 }
 
 function createSnapshotTools(runtime) {
-  // Encode string content for inline data URI script replacement.
   function toBase64Utf8(value) {
     try {
       return btoa(unescape(encodeURIComponent(value)));
@@ -188,7 +176,6 @@ function createSnapshotTools(runtime) {
     }
   }
 
-  // Convert binary responses to base64 without overflowing call stack.
   function arrayBufferToBase64(buffer) {
     try {
       var bytes = new Uint8Array(buffer);
@@ -202,13 +189,11 @@ function createSnapshotTools(runtime) {
     }
   }
 
-  // Fetch text assets as-is while preserving authenticated cookies.
   async function fetchText(url) {
     var response = await runtime.originalFetch(url, { credentials: 'include' });
     return response.ok ? response.text() : '';
   }
 
-  // Fetch media assets and convert them to data URLs.
   async function fetchAsDataUrl(url) {
     var response = await runtime.originalFetch(url, { credentials: 'include' });
     if (!response.ok) return '';
@@ -220,7 +205,6 @@ function createSnapshotTools(runtime) {
     return 'data:' + contentType + ';base64,' + base64;
   }
 
-  // Limit snapshot generation to the memorization page.
   function shouldCaptureSnapshot() {
     return window.location.pathname === runtime.memorizationPath;
   }
@@ -229,7 +213,6 @@ function createSnapshotTools(runtime) {
     return shouldCaptureSnapshot() && url.indexOf('/local/memorization/') !== -1;
   }
 
-  // Clone the current page and inline external assets so it works offline.
   async function buildOfflineSnapshotHtml() {
     var doc = new DOMParser().parseFromString(document.documentElement.outerHTML, 'text/html');
 
@@ -296,7 +279,6 @@ function createSnapshotTools(runtime) {
     return '<!doctype html>\n' + doc.documentElement.outerHTML;
   }
 
-  // Capture and post encoded snapshot while preventing concurrent work.
   async function captureAndPostOfflineSnapshot() {
     if (!shouldCaptureSnapshot() || runtime.snapshotBuilding) return;
 
@@ -317,7 +299,6 @@ function createSnapshotTools(runtime) {
     }
   }
 
-  // Delay capture slightly to let initial page rendering settle.
   function scheduleSnapshotCapture() {
     setTimeout(captureAndPostOfflineSnapshot, 300);
   }
@@ -346,14 +327,12 @@ function installCacheRuntime() {
   if (window.__memoCacheInstalled) return;
   window.__memoCacheInstalled = true;
 
-  // Reuse an existing runtime object so other injected scripts keep stable references.
   var runtime = window.__memoCacheRuntime || {};
 
   applyRuntimeConstants(runtime);
   runtime.originalFetch = window.fetch;
   initializeForceCacheFlag();
 
-  // Compose runtime behavior from focused modules.
   assignTools(runtime, createMessagingTools(runtime));
   assignTools(runtime, createDateCacheTools(runtime));
   assignTools(runtime, createRequestTools(runtime));
@@ -459,7 +438,6 @@ function installOfflineUi() {
 }
 
 async function handlePassthroughRequest(runtime, thisArg, args, requestUrl) {
-  // Keep non-memorization requests unchanged and refresh snapshots when relevant pages mutate.
   var passthroughResponse = await runtime.originalFetch.apply(thisArg, args);
   if (runtime.shouldRefreshSnapshotForUrl(requestUrl)) {
     setTimeout(runtime.captureAndPostOfflineSnapshot, 100);
@@ -545,7 +523,6 @@ function installFetchPatch() {
   if (!runtime) return;
   if (runtime.fetchPatched) return;
 
-  // Patch fetch once and delegate all behavior to focused handlers.
   runtime.fetchPatched = true;
   window.fetch = createPatchedFetch(runtime);
 }

@@ -35,18 +35,21 @@ export function useOfflineSnapshot(addDebugLog) {
   useEffect(() => {
     let mounted = true;
 
-    AsyncStorage.getItem(MEMORIZATION_OFFLINE_HTML_KEY)
-      .then((html) => {
+    const restoreOfflineSnapshot = async () => {
+      try {
+        const html = await AsyncStorage.getItem(MEMORIZATION_OFFLINE_HTML_KEY);
         if (!mounted || !html) {
           return;
         }
 
         setCachedOfflineHtml(html);
         addDebugLog('[CACHE] Offline snapshot restored');
-      })
-      .catch(() => {
+      } catch {
         addDebugLog('[CACHE] Offline snapshot load failed');
-      });
+      }
+    };
+
+    restoreOfflineSnapshot();
 
     return () => {
       mounted = false;
