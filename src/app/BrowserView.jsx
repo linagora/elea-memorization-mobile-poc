@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, StatusBar } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createWebviewCacheInjection } from '../features/createWebviewCacheInjection';
@@ -153,6 +153,7 @@ export default function BrowserView() {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle='dark-content' translucent />
       <WebView
         style={styles.webview}
         source={webViewSource}
