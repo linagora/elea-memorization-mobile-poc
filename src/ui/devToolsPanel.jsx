@@ -1,4 +1,4 @@
-import { Button, ScrollView, Switch, Text, View } from 'react-native';
+import { ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function DevToolsPanel({
@@ -28,7 +28,7 @@ export function DevToolsPanel({
         right: 10,
         zIndex: 9999,
         boxShadow: '0px 1px 10px #00000040',
-        overflow: "visible",
+        overflow: 'visible',
         borderRadius: 8,
       }}
     >
@@ -40,7 +40,7 @@ export function DevToolsPanel({
           marginBottom: 6,
         }}
       >
-        <Text style={{ fontSize: 14, fontFamily: "Arial" }}>Force cache (offline)</Text>
+        <Text style={{ fontSize: 14, fontFamily: 'Arial' }}>Force cache (offline)</Text>
         <Switch value={forceCache} onValueChange={onToggleForceCache} />
       </View>
       <View
@@ -56,7 +56,7 @@ export function DevToolsPanel({
         <DevToolsButton title="Rafraîchir" onPress={onReload} />
         <DevToolsButton title="Mémorisation" onPress={onOpenMemorization} />
       </View>
-      <Text style={{ fontSize: 16, textAlign: 'center', fontFamily: "Arial" }} numberOfLines={1}>
+      <Text style={{ fontSize: 16, textAlign: 'center', fontFamily: 'Arial' }} numberOfLines={1}>
         {currentUrl}
       </Text>
 
@@ -106,12 +106,10 @@ const DevToolsButton = ({ title, onPress }) => (
       fontSize: 17,
       color: '#007AFF',
       padding: 8,
-      fontFamily: "Arial",
+      fontFamily: 'Arial',
     }}
     onPress={onPress}
   >
     {title}
   </Text>
 );
-
-export default DevToolsPanel;
