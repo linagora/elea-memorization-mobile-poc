@@ -1,6 +1,33 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MEMORIZATION_OFFLINE_HTML_KEY } from './constants';
+import { MAX_DEBUG_LOGS, MEMORIZATION_OFFLINE_HTML_KEY } from './config';
+
+export function useDebugLogs() {
+  const [debugLogs, setDebugLogs] = useState([]);
+  const debugScrollView = useRef(null);
+
+  const addDebugLog = useCallback((message) => {
+    const logText = `${new Date().toLocaleTimeString()} - ${message}`;
+    setDebugLogs((prevLogs) => [...prevLogs.slice(-(MAX_DEBUG_LOGS - 1)), logText]);
+
+    setTimeout(() => {
+      if (debugScrollView.current) {
+        debugScrollView.current.scrollToEnd({ animated: true });
+      }
+    }, 30);
+  }, []);
+
+  const clearDebugLogs = useCallback(() => {
+    setDebugLogs([]);
+  }, []);
+
+  return {
+    debugLogs,
+    addDebugLog,
+    clearDebugLogs,
+    debugScrollView,
+  };
+}
 
 export function useOfflineSnapshot(addDebugLog) {
   const [cachedOfflineHtml, setCachedOfflineHtml] = useState('');
@@ -47,5 +74,3 @@ export function useOfflineSnapshot(addDebugLog) {
     saveOfflineSnapshot,
   };
 }
-
-export default useOfflineSnapshot;

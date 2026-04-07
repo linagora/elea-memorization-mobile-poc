@@ -3,18 +3,11 @@ const path = require('path');
 const esbuild = require('esbuild');
 
 const projectRoot = path.resolve(__dirname, '..');
-const sourceRoot = path.join(projectRoot, 'src', 'features', 'injectedScripts', 'source');
-const outputFile = path.join(
-  projectRoot,
-  'src',
-  'features',
-  'injectedScripts',
-  'generated',
-  'injectedScripts.generated.js'
-);
+const sourceRoot = path.join(projectRoot, 'src', 'injections', 'source');
+const outputFile = path.join(projectRoot, 'src', 'injections', 'generatedScripts.js');
 
 const entries = [
-  { exportName: 'CACHE_INJECTION_SCRIPT', entry: path.join(sourceRoot, 'index.js') },
+  { exportName: 'CACHE_INJECTION_SCRIPT', entry: path.join(sourceRoot, 'cache.js') },
   { exportName: 'AUTO_LOGIN_INJECTION_SCRIPT', entry: path.join(sourceRoot, 'autoLogin.js') },
   { exportName: 'MOBILE_INJECTION_SCRIPT', entry: path.join(sourceRoot, 'mobile.js') },
 ];
