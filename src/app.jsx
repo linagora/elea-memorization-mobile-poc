@@ -1,5 +1,5 @@
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import BrowserView from './BrowserView';
+import BrowserView from './ui/browserView';
 
 export default function App() {
   return (

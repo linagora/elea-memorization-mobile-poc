@@ -1,8 +1,7 @@
 import { StyleSheet, View, StatusBar } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createWebviewCacheInjection } from '../features/createWebviewCacheInjection';
-import { createWebviewAutoLoginInjection } from '../features/createWebviewAutoLoginInjection';
+import { createWebviewCacheInjection, createWebviewAutoLoginInjection, createWebviewMobileInjection } from '../injections/webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AUTO_LOGIN_ENABLED,
@@ -10,11 +9,9 @@ import {
   LOGIN_USERNAME,
   MEMORIZATION_BASE_URL,
   MEMORIZATION_URL,
-} from '../features/browser/constants';
-import { createWebviewMobileInjection } from '../features/browser/createWebviewMobileInjection';
-import { useDebugLogs } from '../features/browser/useDebugLogs';
-import { useOfflineSnapshot } from '../features/browser/useOfflineSnapshot';
-import { DevToolsPanel } from '../components/DevToolsPanel';
+} from '../browser/config';
+import { useDebugLogs, useOfflineSnapshot } from '../browser/hooks';
+import { DevToolsPanel } from './devToolsPanel';
 
 const OFFLINE_HTML_PREFIX = '[OFFLINE_HTML] ';
 
