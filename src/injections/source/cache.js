@@ -3,6 +3,8 @@ function applyRuntimeConstants(runtime) {
   runtime.memorizationPath = '/local/memorization/index.php';
   runtime.cacheKey = '__memo_last_date_string__';
   runtime.pendingSetKey = '__memo_pending_set_date_string__';
+  runtime.lastSetBodyKey = '__memo_last_set_body__';
+  runtime.baseUrl = typeof window.__memoBaseUrl === 'string' ? window.__memoBaseUrl : '';
   runtime.snapshotMessagePrefix = '[OFFLINE_HTML] ';
 }
 
@@ -101,6 +103,21 @@ function createDateCacheTools(runtime) {
     } catch (e) {}
   }
 
+  function readLastSetBody() {
+    try {
+      return localStorage.getItem(runtime.lastSetBodyKey) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function writeLastSetBody(value) {
+    if (!value) return;
+    try {
+      localStorage.setItem(runtime.lastSetBodyKey, String(value));
+    } catch (e) {}
+  }
+
   function extractDateFromBody(body) {
     if (!body) return '';
 
@@ -143,6 +160,8 @@ function createDateCacheTools(runtime) {
     readPendingSetDate: readPendingSetDate,
     writePendingSetDate: writePendingSetDate,
     clearPendingSetDate: clearPendingSetDate,
+    readLastSetBody: readLastSetBody,
+    writeLastSetBody: writeLastSetBody,
     extractDateFromBody: extractDateFromBody,
     extractDateFromJson: extractDateFromJson,
   };
@@ -177,6 +196,14 @@ function createRequestTools(runtime) {
     return init && init.body ? init.body : null;
   }
 
+  function bodyToText(body) {
+    if (!body) return '';
+    if (typeof body === 'string') return body;
+    if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) return body.toString();
+    if (typeof body.toString === 'function') return body.toString();
+    return '';
+  }
+
   function toAbsoluteUrl(rawUrl) {
     try {
       return new URL(rawUrl, window.location.href).href;
@@ -190,8 +217,101 @@ function createRequestTools(runtime) {
     getRequestUrl: getRequestUrl,
     getRequestMethod: getRequestMethod,
     getRequestBody: getRequestBody,
+    bodyToText: bodyToText,
     toAbsoluteUrl: toAbsoluteUrl,
   };
+}
+
+function resolveEndpointUrlForSync(runtime) {
+  var candidates = [];
+
+  if (runtime.lastEndpointUrl) {
+    candidates.push(runtime.lastEndpointUrl);
+  }
+
+  if (runtime.baseUrl) {
+    candidates.push(runtime.baseUrl.replace(/\/$/, '') + runtime.endpointPath);
+  }
+
+  var absoluteFromLocation = runtime.toAbsoluteUrl(runtime.endpointPath);
+  if (absoluteFromLocation) {
+    candidates.push(absoluteFromLocation);
+  }
+
+  var origin = (window.location && window.location.origin) || '';
+  if (origin && /^https?:\/\//i.test(origin)) {
+    candidates.push(origin.replace(/\/$/, '') + runtime.endpointPath);
+  }
+
+  for (var i = 0; i < candidates.length; i += 1) {
+    if (/^https?:\/\//i.test(candidates[i])) {
+      return candidates[i];
+    }
+  }
+
+  return runtime.endpointPath;
+}
+
+function toUnixMs(value) {
+  if (value === undefined || value === null) return 0;
+  var raw = String(value).trim();
+  if (!raw) return 0;
+  if (/^\d{13}$/.test(raw)) return Number(raw);
+  if (/^\d{10}$/.test(raw)) return Number(raw) * 1000;
+  var match = raw.match(/^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  if (match) {
+    return new Date(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4]),
+      Number(match[5]),
+      Number(match[6])
+    ).getTime();
+  }
+  var parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildSyncSetBody(runtime, pendingDate) {
+  var pendingMs = toUnixMs(pendingDate) || Date.now();
+  var pendingSec = Math.floor(pendingMs / 1000);
+  var params = new URLSearchParams(runtime.readLastSetBody() || '');
+  var keys = ['time', 'date', 'value', 'timestamp'];
+  var updated = false;
+
+  for (var i = 0; i < keys.length; i += 1) {
+    var key = keys[i];
+    if (!params.has(key)) continue;
+
+    var currentValue = String(params.get(key) || '').trim();
+    if (/^\d{13}$/.test(currentValue)) {
+      params.set(key, String(pendingMs));
+      updated = true;
+      continue;
+    }
+    if (/^\d{10}$/.test(currentValue)) {
+      params.set(key, String(pendingSec));
+      updated = true;
+      continue;
+    }
+    params.set(key, runtime.normalizeDateString(pendingDate));
+    updated = true;
+  }
+
+  if (!updated) {
+    params.set('time', String(pendingSec));
+    params.set('date', String(pendingSec));
+  }
+
+  return params.toString();
+}
+
+function areDatesEquivalent(left, right) {
+  var leftMs = toUnixMs(left);
+  var rightMs = toUnixMs(right);
+  if (!leftMs || !rightMs) return String(left).trim() === String(right).trim();
+  return Math.abs(leftMs - rightMs) <= 60000;
 }
 
 function createSnapshotTools(runtime) {
@@ -357,7 +477,7 @@ function installCacheRuntime() {
   var runtime = window.__memoCacheRuntime || {};
 
   applyRuntimeConstants(runtime);
-  runtime.originalFetch = window.fetch;
+  runtime.originalFetch = window.fetch.bind(window);
   initializeForceCacheFlag();
 
   assignTools(runtime, createMessagingTools(runtime));
@@ -436,7 +556,7 @@ function installOfflineUi() {
     async function handleSet(event) {
       if (!canInstallOfflineUi()) return;
       stopEvent(event);
-      var dateString = runtime.normalizeDateString(Date.now());
+      var dateString = Date.now();
       if (!dateString) return;
 
       runtime.writeCachedDate(dateString);
@@ -495,15 +615,14 @@ async function syncPendingOfflineSet(runtime) {
   if (!pendingDate) return false;
 
   try {
-    var body = new URLSearchParams();
-    body.set('time', pendingDate);
-    body.set('date', pendingDate);
+    var requestBody = buildSyncSetBody(runtime, pendingDate);
+    var endpointUrl = resolveEndpointUrlForSync(runtime);
 
-    var response = await runtime.originalFetch(runtime.endpointPath, {
+    var response = await runtime.originalFetch(endpointUrl, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-      body: body.toString(),
+      body: requestBody,
     });
 
     if (!response.ok) {
@@ -511,12 +630,31 @@ async function syncPendingOfflineSet(runtime) {
       return false;
     }
 
+    try {
+      var verifyResponse = await runtime.originalFetch(endpointUrl, { method: 'GET', credentials: 'include' });
+      if (verifyResponse.ok) {
+        var verifyJson = await verifyResponse.json();
+        var verifiedDate = runtime.extractDateFromJson(verifyJson);
+        if (verifiedDate) {
+          runtime.writeCachedDate(verifiedDate);
+          if (!areDatesEquivalent(verifiedDate, pendingDate)) {
+            runtime.post('SET sync verify mismatch expected=' + pendingDate + ' got=' + verifiedDate);
+            return false;
+          }
+        }
+      }
+    } catch (e) {}
+
     runtime.writeCachedDate(pendingDate);
     runtime.clearPendingSetDate();
     runtime.post('SET synced after offline date=' + pendingDate);
     return true;
   } catch (e) {
-    runtime.post('SET sync failed network');
+    var errorMessage = e && e.message ? e.message : String(e);
+    var locationHref = (window.location && window.location.href) || '';
+    runtime.post(
+      'SET sync failed network endpoint=' + endpointUrl + ' location=' + locationHref + ' error=' + errorMessage
+    );
     return false;
   }
 }
@@ -555,9 +693,11 @@ function tryFallbackToCache(runtime, method) {
 async function handleEndpointRequest(runtime, thisArg, args, input, init) {
   var method = runtime.getRequestMethod(input, init);
   var requestBody = runtime.getRequestBody(init);
+  var requestBodyText = runtime.bodyToText(requestBody);
   var postDate = '';
 
   if (method === 'POST') {
+    if (requestBodyText) runtime.writeLastSetBody(requestBodyText);
     postDate = trySyncDateFromPostBody(runtime, requestBody);
   }
 
@@ -589,6 +729,10 @@ async function handleEndpointRequest(runtime, thisArg, args, input, init) {
 function createPatchedFetch(runtime) {
   return async function patchedFetch(input, init) {
     var requestUrl = runtime.getRequestUrl(input);
+    var absoluteRequestUrl = runtime.toAbsoluteUrl(requestUrl);
+    if (absoluteRequestUrl && absoluteRequestUrl.indexOf(runtime.endpointPath) !== -1) {
+      runtime.lastEndpointUrl = absoluteRequestUrl;
+    }
     var args = arguments;
 
     if (requestUrl.indexOf(runtime.endpointPath) === -1) {

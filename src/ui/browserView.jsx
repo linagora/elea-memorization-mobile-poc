@@ -32,7 +32,10 @@ export function BrowserView() {
   const { cachedOfflineHtml, saveOfflineSnapshot } = useOfflineSnapshot(addDebugLog);
 
   const webviewCacheInjection = useMemo(() => {
-    return createWebviewCacheInjection({ forceCache });
+    return createWebviewCacheInjection({
+      forceCache,
+      baseUrl: MEMORIZATION_BASE_URL,
+    });
   }, [forceCache]);
 
   const webviewAutoLoginInjection = useMemo(() => {

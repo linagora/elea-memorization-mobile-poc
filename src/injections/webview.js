@@ -44,6 +44,7 @@ export function createWebviewCacheInjection(config) {
     script: CACHE_INJECTION_SCRIPT,
     globals: {
       __memoForceCache: Boolean(config && config.forceCache === true),
+      __memoBaseUrl: (config && config.baseUrl) || '',
     },
   });
 }
