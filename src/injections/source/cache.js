@@ -2,6 +2,7 @@ function applyRuntimeConstants(runtime) {
   runtime.endpointPath = '/local/memorization/ajax/ajax.php';
   runtime.memorizationPath = '/local/memorization/index.php';
   runtime.cacheKey = '__memo_last_date_string__';
+  runtime.pendingSetKey = '__memo_pending_set_date_string__';
   runtime.snapshotMessagePrefix = '[OFFLINE_HTML] ';
 }
 
@@ -77,6 +78,29 @@ function createDateCacheTools(runtime) {
     return normalized;
   }
 
+  function readPendingSetDate() {
+    try {
+      return localStorage.getItem(runtime.pendingSetKey) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function writePendingSetDate(value) {
+    var normalized = normalizeDateString(value);
+    if (!normalized) return '';
+    try {
+      localStorage.setItem(runtime.pendingSetKey, normalized);
+    } catch (e) {}
+    return normalized;
+  }
+
+  function clearPendingSetDate() {
+    try {
+      localStorage.removeItem(runtime.pendingSetKey);
+    } catch (e) {}
+  }
+
   function extractDateFromBody(body) {
     if (!body) return '';
 
@@ -116,6 +140,9 @@ function createDateCacheTools(runtime) {
     normalizeDateString: normalizeDateString,
     readCachedDate: readCachedDate,
     writeCachedDate: writeCachedDate,
+    readPendingSetDate: readPendingSetDate,
+    writePendingSetDate: writePendingSetDate,
+    clearPendingSetDate: clearPendingSetDate,
     extractDateFromBody: extractDateFromBody,
     extractDateFromJson: extractDateFromJson,
   };
@@ -337,12 +364,16 @@ function installCacheRuntime() {
   assignTools(runtime, createDateCacheTools(runtime));
   assignTools(runtime, createRequestTools(runtime));
   assignTools(runtime, createSnapshotTools(runtime));
+  runtime.syncPendingOfflineSet = function() {
+    return syncPendingOfflineSet(runtime);
+  };
 
   runtime.isForceCacheEnabled = function() {
     return window.__memoForceCache === true;
   };
 
   window.__memoCacheRuntime = runtime;
+  setTimeout(runtime.syncPendingOfflineSet, 0);
 
   if (document.readyState === 'complete') {
     runtime.scheduleSnapshotCapture();
@@ -409,6 +440,7 @@ function installOfflineUi() {
       if (!dateString) return;
 
       runtime.writeCachedDate(dateString);
+      runtime.writePendingSetDate(dateString);
     }
 
     nodes.getButton.addEventListener('click', handleGet, true);
@@ -416,10 +448,9 @@ function installOfflineUi() {
 
     runtime.offlineUiInstalled = true;
     runtime.post('offline GET/SET handlers installed');
-
-    var initialDate = runtime.readCachedDate();
-    if (initialDate) setContent(initialDate);
   }
+
+  runtime.installOfflineUiHandlers = installOfflineUiHandlers;
 
   function scheduleOfflineUiInstall() {
     installOfflineUiHandlers();
@@ -435,6 +466,9 @@ function installOfflineUi() {
   }
 
   window.addEventListener('offline', installOfflineUiHandlers);
+  window.addEventListener('online', function() {
+    if (runtime.syncPendingOfflineSet) runtime.syncPendingOfflineSet();
+  });
 }
 
 async function handlePassthroughRequest(runtime, thisArg, args, requestUrl) {
@@ -447,9 +481,44 @@ async function handlePassthroughRequest(runtime, thisArg, args, requestUrl) {
 
 function trySyncDateFromPostBody(runtime, requestBody) {
   var bodyDate = runtime.extractDateFromBody(requestBody);
-  if (!bodyDate) return;
+  if (!bodyDate) return '';
   runtime.writeCachedDate(bodyDate);
   runtime.post('SET cached date=' + bodyDate);
+  return bodyDate;
+}
+
+async function syncPendingOfflineSet(runtime) {
+  if (runtime.isForceCacheEnabled()) return false;
+  if (navigator.onLine === false) return false;
+
+  var pendingDate = runtime.readPendingSetDate();
+  if (!pendingDate) return false;
+
+  try {
+    var body = new URLSearchParams();
+    body.set('time', pendingDate);
+    body.set('date', pendingDate);
+
+    var response = await runtime.originalFetch(runtime.endpointPath, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      body: body.toString(),
+    });
+
+    if (!response.ok) {
+      runtime.post('SET sync failed status=' + response.status);
+      return false;
+    }
+
+    runtime.writeCachedDate(pendingDate);
+    runtime.clearPendingSetDate();
+    runtime.post('SET synced after offline date=' + pendingDate);
+    return true;
+  } catch (e) {
+    runtime.post('SET sync failed network');
+    return false;
+  }
 }
 
 function tryServeForcedCache(runtime, method) {
@@ -486,19 +555,31 @@ function tryFallbackToCache(runtime, method) {
 async function handleEndpointRequest(runtime, thisArg, args, input, init) {
   var method = runtime.getRequestMethod(input, init);
   var requestBody = runtime.getRequestBody(init);
+  var postDate = '';
 
   if (method === 'POST') {
-    trySyncDateFromPostBody(runtime, requestBody);
+    postDate = trySyncDateFromPostBody(runtime, requestBody);
   }
 
   var forcedResponse = tryServeForcedCache(runtime, method);
-  if (forcedResponse) return forcedResponse;
+  if (forcedResponse) {
+    if (method === 'POST' && postDate) runtime.writePendingSetDate(postDate);
+    return forcedResponse;
+  }
 
   try {
     var response = await runtime.originalFetch.apply(thisArg, args);
+    if (method === 'POST' && postDate) {
+      if (response.ok) {
+        runtime.clearPendingSetDate();
+      } else {
+        runtime.writePendingSetDate(postDate);
+      }
+    }
     await trySyncDateFromNetwork(runtime, method, response);
     return response;
   } catch (error) {
+    if (method === 'POST' && postDate) runtime.writePendingSetDate(postDate);
     var fallbackResponse = tryFallbackToCache(runtime, method);
     if (fallbackResponse) return fallbackResponse;
     throw error;
