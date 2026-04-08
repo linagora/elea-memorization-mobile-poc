@@ -72,19 +72,21 @@ export function BrowserView() {
 
     webViewRef.current.injectJavaScript(`
       window.__memoForceCache = ${forceCache ? 'true' : 'false'};
+      if (window.__memoCacheRuntime && typeof window.__memoCacheRuntime.installOfflineUiHandlers === 'function') {
+        window.__memoCacheRuntime.installOfflineUiHandlers();
+      }
+      if (!window.__memoForceCache && window.__memoCacheRuntime && typeof window.__memoCacheRuntime.syncPendingOfflineSet === 'function') {
+        window.__memoCacheRuntime.syncPendingOfflineSet();
+        setTimeout(function() {
+          if (window.__memoCacheRuntime && typeof window.__memoCacheRuntime.syncPendingOfflineSet === 'function') {
+            window.__memoCacheRuntime.syncPendingOfflineSet();
+          }
+        }, 500);
+      }
       true;
     `);
 
     addDebugLog(`[CACHE] Force cache ${forceCache ? 'enabled' : 'disabled'}`);
-
-    if (forceCache && cachedOfflineHtml) {
-      setWebViewSource({
-        html: cachedOfflineHtml,
-        baseUrl: MEMORIZATION_BASE_URL,
-      });
-      addDebugLog('[CACHE] Loaded offline snapshot');
-      return;
-    }
 
     if (!forceCache) {
       setWebViewSource((previousSource) => {
@@ -95,7 +97,7 @@ export function BrowserView() {
         return { uri: currentUrl || MEMORIZATION_URL };
       });
     }
-  }, [addDebugLog, cachedOfflineHtml, currentUrl, forceCache]);
+  }, [addDebugLog, currentUrl, forceCache]);
 
   const handleOpenMemorization = useCallback(() => {
     setWebViewSource({ uri: MEMORIZATION_URL });
