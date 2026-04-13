@@ -223,31 +223,14 @@ function createRequestTools(runtime) {
 }
 
 function resolveEndpointUrlForSync(runtime) {
-  var candidates = [];
-
-  if (runtime.lastEndpointUrl) {
-    candidates.push(runtime.lastEndpointUrl);
-  }
-
   if (runtime.baseUrl) {
-    candidates.push(runtime.baseUrl.replace(/\/$/, '') + runtime.endpointPath);
+    try {
+      return new URL(runtime.endpointPath, runtime.baseUrl).href;
+    } catch (e) {}
   }
 
   var absoluteFromLocation = runtime.toAbsoluteUrl(runtime.endpointPath);
-  if (absoluteFromLocation) {
-    candidates.push(absoluteFromLocation);
-  }
-
-  var origin = (window.location && window.location.origin) || '';
-  if (origin && /^https?:\/\//i.test(origin)) {
-    candidates.push(origin.replace(/\/$/, '') + runtime.endpointPath);
-  }
-
-  for (var i = 0; i < candidates.length; i += 1) {
-    if (/^https?:\/\//i.test(candidates[i])) {
-      return candidates[i];
-    }
-  }
+  if (absoluteFromLocation) return absoluteFromLocation;
 
   return runtime.endpointPath;
 }
@@ -305,13 +288,6 @@ function buildSyncSetBody(runtime, pendingDate) {
   }
 
   return params.toString();
-}
-
-function areDatesEquivalent(left, right) {
-  var leftMs = toUnixMs(left);
-  var rightMs = toUnixMs(right);
-  if (!leftMs || !rightMs) return String(left).trim() === String(right).trim();
-  return Math.abs(leftMs - rightMs) <= 60000;
 }
 
 function createSnapshotTools(runtime) {
@@ -553,11 +529,10 @@ function installOfflineUi() {
       }
     }
 
-    async function handleSet(event) {
+    function handleSet(event) {
       if (!canInstallOfflineUi()) return;
       stopEvent(event);
       var dateString = Date.now();
-      if (!dateString) return;
 
       runtime.writeCachedDate(dateString);
       runtime.writePendingSetDate(dateString);
@@ -630,31 +605,12 @@ async function syncPendingOfflineSet(runtime) {
       return false;
     }
 
-    try {
-      var verifyResponse = await runtime.originalFetch(endpointUrl, { method: 'GET', credentials: 'include' });
-      if (verifyResponse.ok) {
-        var verifyJson = await verifyResponse.json();
-        var verifiedDate = runtime.extractDateFromJson(verifyJson);
-        if (verifiedDate) {
-          runtime.writeCachedDate(verifiedDate);
-          if (!areDatesEquivalent(verifiedDate, pendingDate)) {
-            runtime.post('SET sync verify mismatch expected=' + pendingDate + ' got=' + verifiedDate);
-            return false;
-          }
-        }
-      }
-    } catch (e) {}
-
     runtime.writeCachedDate(pendingDate);
     runtime.clearPendingSetDate();
     runtime.post('SET synced after offline date=' + pendingDate);
     return true;
   } catch (e) {
-    var errorMessage = e && e.message ? e.message : String(e);
-    var locationHref = (window.location && window.location.href) || '';
-    runtime.post(
-      'SET sync failed network endpoint=' + endpointUrl + ' location=' + locationHref + ' error=' + errorMessage
-    );
+    runtime.post('SET sync failed network');
     return false;
   }
 }
@@ -729,10 +685,6 @@ async function handleEndpointRequest(runtime, thisArg, args, input, init) {
 function createPatchedFetch(runtime) {
   return async function patchedFetch(input, init) {
     var requestUrl = runtime.getRequestUrl(input);
-    var absoluteRequestUrl = runtime.toAbsoluteUrl(requestUrl);
-    if (absoluteRequestUrl && absoluteRequestUrl.indexOf(runtime.endpointPath) !== -1) {
-      runtime.lastEndpointUrl = absoluteRequestUrl;
-    }
     var args = arguments;
 
     if (requestUrl.indexOf(runtime.endpointPath) === -1) {
