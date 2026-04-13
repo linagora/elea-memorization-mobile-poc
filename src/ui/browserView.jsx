@@ -80,11 +80,6 @@ export function BrowserView() {
       }
       if (!window.__memoForceCache && window.__memoCacheRuntime && typeof window.__memoCacheRuntime.syncPendingOfflineSet === 'function') {
         window.__memoCacheRuntime.syncPendingOfflineSet();
-        setTimeout(function() {
-          if (window.__memoCacheRuntime && typeof window.__memoCacheRuntime.syncPendingOfflineSet === 'function') {
-            window.__memoCacheRuntime.syncPendingOfflineSet();
-          }
-        }, 500);
       }
       true;
     `);
