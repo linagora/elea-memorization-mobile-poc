@@ -116,7 +116,7 @@ export function BrowserView() {
         return;
       }
 
-      if (data === '[DEVTOOLS] Toggle dev tools') {
+      if (typeof data === 'string' && data.indexOf('[DEVTOOLS] Toggle dev tools') !== -1) {
         setDevToolsVisible((visible) => !visible);
         return;
       }
