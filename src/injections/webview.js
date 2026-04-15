@@ -5,11 +5,11 @@ import {
 } from './generatedScripts';
 
 export function createInjectedScript(config) {
-  var script = (config && config.script) || '';
-  var globals = (config && config.globals) || {};
+  const script = config?.script || '';
+  const globals = config?.globals || {};
 
-  var assignments = Object.keys(globals)
-    .map(function(key) {
+  const assignments = Object.keys(globals)
+    .map((key) => {
       return 'window.' + key + ' = ' + JSON.stringify(globals[key]) + ';';
     })
     .join('\n');
@@ -43,8 +43,8 @@ export function createWebviewCacheInjection(config) {
   return createInjectedScript({
     script: CACHE_INJECTION_SCRIPT,
     globals: {
-      __memoForceCache: Boolean(config && config.forceCache === true),
-      __memoBaseUrl: (config && config.baseUrl) || '',
+      __memoForceCache: Boolean(config?.forceCache === true),
+      __memoBaseUrl: config?.baseUrl || '',
     },
   });
 }
