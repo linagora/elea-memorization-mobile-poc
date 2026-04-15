@@ -49,18 +49,75 @@
     style.textContent = css;
   }
 
+  function ensureGlobalDevButtonHandler() {
+    if (window.__memoDevtoolsGlobalHandlerInstalled) return;
+    window.__memoDevtoolsGlobalHandlerInstalled = true;
+
+    function postDevtoolsToggle() {
+      try {
+        if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
+          window.ReactNativeWebView.postMessage('[DEVTOOLS] Toggle dev tools');
+          return;
+        }
+      } catch (e) {}
+
+      try {
+        if (typeof window.postMessage === 'function') {
+          window.postMessage('[DEVTOOLS] Toggle dev tools', '*');
+        }
+      } catch (e) {}
+    }
+
+    document.addEventListener('click', function(event) {
+      var target = event && event.target;
+      if (!target || typeof target.closest !== 'function') return;
+      var button = target.closest('#native-mobile-devtools');
+      if (!button) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation();
+      }
+      postDevtoolsToggle();
+    }, true);
+  }
+
   function ensureDevButton() {
     var usermenu = document.querySelector('.navbar.fixed-top .usermenu');
     if (!usermenu) return false;
 
-    if (!document.getElementById('native-mobile-devtools')) {
-      var button = document.createElement('button');
+    function postDevtoolsToggle() {
+      try {
+        if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
+          window.ReactNativeWebView.postMessage('[DEVTOOLS] Toggle dev tools');
+          return;
+        }
+      } catch (e) {}
+
+      try {
+        if (typeof window.postMessage === 'function') {
+          window.postMessage('[DEVTOOLS] Toggle dev tools', '*');
+        }
+      } catch (e) {}
+    }
+
+    var button = document.getElementById('native-mobile-devtools');
+    if (!button) {
+      button = document.createElement('button');
       button.id = 'native-mobile-devtools';
-      button.textContent = 'DEV';
-      button.addEventListener('click', function() {
-        window.ReactNativeWebView.postMessage('[DEVTOOLS] Toggle dev tools');
-      });
       usermenu.prepend(button);
+    }
+    button.type = 'button';
+    button.textContent = 'DEV';
+    if (button.dataset.nativeDevtoolsBound !== '1') {
+      button.addEventListener('click', function(event) {
+        if (event) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        postDevtoolsToggle();
+      });
+      button.dataset.nativeDevtoolsBound = '1';
     }
 
     return true;
@@ -69,6 +126,7 @@
   function run() {
     ensureViewport();
     ensureStyle();
+    ensureGlobalDevButtonHandler();
     if (ensureDevButton()) return;
 
     var observer = new MutationObserver(function() {
