@@ -28,9 +28,7 @@ function createMessagingTools(runtime) {
 }
 
 function initializeForceCacheFlag() {
-  var forceCacheFromConfig = window.__memoForceCache === true;
-  window.__memoForceCache =
-    typeof window.__memoForceCache === 'boolean' ? window.__memoForceCache : forceCacheFromConfig;
+  window.__memoForceCache = window.__memoForceCache === true;
 }
 
 function createDateCacheTools(runtime) {
@@ -481,6 +479,8 @@ function installCacheRuntime() {
 function installOfflineUi() {
   var runtime = window.__memoCacheRuntime;
   if (!runtime) return;
+  if (window.__memoOfflineUiInstalled) return;
+  window.__memoOfflineUiInstalled = true;
 
   function canInstallOfflineUi() {
     return runtime.isForceCacheEnabled() || navigator.onLine === false;
@@ -536,6 +536,7 @@ function installOfflineUi() {
 
       runtime.writeCachedDate(dateString);
       runtime.writePendingSetDate(dateString);
+      setContent(dateString);
     }
 
     nodes.getButton.addEventListener('click', handleGet, true);

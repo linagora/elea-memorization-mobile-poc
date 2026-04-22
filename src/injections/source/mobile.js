@@ -49,24 +49,24 @@
     style.textContent = css;
   }
 
+  function postDevtoolsToggle() {
+    try {
+      if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
+        window.ReactNativeWebView.postMessage('[DEVTOOLS] Toggle dev tools');
+        return;
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof window.postMessage === 'function') {
+        window.postMessage('[DEVTOOLS] Toggle dev tools', '*');
+      }
+    } catch (e) {}
+  }
+
   function ensureGlobalDevButtonHandler() {
     if (window.__memoDevtoolsGlobalHandlerInstalled) return;
     window.__memoDevtoolsGlobalHandlerInstalled = true;
-
-    function postDevtoolsToggle() {
-      try {
-        if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
-          window.ReactNativeWebView.postMessage('[DEVTOOLS] Toggle dev tools');
-          return;
-        }
-      } catch (e) {}
-
-      try {
-        if (typeof window.postMessage === 'function') {
-          window.postMessage('[DEVTOOLS] Toggle dev tools', '*');
-        }
-      } catch (e) {}
-    }
 
     document.addEventListener('click', function(event) {
       var target = event && event.target;
@@ -85,21 +85,6 @@
   function ensureDevButton() {
     var usermenu = document.querySelector('.navbar.fixed-top .usermenu');
     if (!usermenu) return false;
-
-    function postDevtoolsToggle() {
-      try {
-        if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
-          window.ReactNativeWebView.postMessage('[DEVTOOLS] Toggle dev tools');
-          return;
-        }
-      } catch (e) {}
-
-      try {
-        if (typeof window.postMessage === 'function') {
-          window.postMessage('[DEVTOOLS] Toggle dev tools', '*');
-        }
-      } catch (e) {}
-    }
 
     var button = document.getElementById('native-mobile-devtools');
     if (!button) {
