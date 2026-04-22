@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function DevToolsPanel({
@@ -39,7 +39,7 @@ export function DevToolsPanel({
           ref={debugScrollView}
         >
           {debugLogs.map((log, index) => (
-            <Text style={styles.logText} key={`${log}-${index}`}>
+            <Text style={styles.logText} key={index}>
               {log}
             </Text>
           ))}
@@ -50,9 +50,9 @@ export function DevToolsPanel({
 }
 
 const DevToolsButton = ({ title, onPress }) => (
-  <Text style={styles.button} onPress={onPress}>
-    {title}
-  </Text>
+  <Pressable style={styles.buttonPressable} onPress={onPress}>
+    <Text style={styles.button}>{title}</Text>
+  </Pressable>
 );
 
 const styles = StyleSheet.create({
@@ -113,10 +113,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Menlo',
     color: 'white',
   },
+  buttonPressable: {
+    minHeight: 44,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
   button: {
     fontSize: 17,
     color: '#007AFF',
-    padding: 8,
     fontFamily: 'Arial',
   },
 });
