@@ -7,7 +7,9 @@
     "start": "npm run build:injections && expo start",
     "android": "npm run build:injections && expo start --android",
     "ios": "npm run build:injections && expo start --ios",
-    "web": "npm run build:injections && expo start --web"
+    "web": "npm run build:injections && expo start --web",
+    "lint": "eslint .",
+    "test": "node --test src/injections/source/"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -22,6 +24,7 @@
   "devDependencies": {
     "esbuild": "^0.25.11",
     "eslint": "^9.0.0",
-    "eslint-config-expo": "~10.0.0"
+    "eslint-config-expo": "~10.0.0",
+    "globals": "^14.0.0"
   }
 }
