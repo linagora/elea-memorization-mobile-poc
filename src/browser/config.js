@@ -5,8 +5,9 @@ export const MEMORIZATION_URL = process.env.EXPO_PUBLIC_MEMORIZATION_URL || DEFA
 export const MEMORIZATION_BASE_URL = process.env.EXPO_PUBLIC_MEMORIZATION_BASE_URL || DEFAULT_MEMORIZATION_BASE_URL;
 export const MEMORIZATION_OFFLINE_HTML_KEY = '__memo_offline_html_v1__';
 
-export const LOGIN_USERNAME = process.env.EXPO_PUBLIC_ELEA_LOGIN_USERNAME || 'student@linagora.com';
-export const LOGIN_PASSWORD = process.env.EXPO_PUBLIC_ELEA_LOGIN_PASSWORD || '***REMOVED***';
+// Identifiants via .env (cf. .env.example) ; auto-login désactivé si absents.
+export const LOGIN_USERNAME = process.env.EXPO_PUBLIC_ELEA_LOGIN_USERNAME || '';
+export const LOGIN_PASSWORD = process.env.EXPO_PUBLIC_ELEA_LOGIN_PASSWORD || '';
 export const AUTO_LOGIN_ENABLED = Boolean(LOGIN_USERNAME && LOGIN_PASSWORD);
 
 export const MAX_DEBUG_LOGS = 250;
