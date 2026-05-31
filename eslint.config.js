@@ -11,7 +11,7 @@ module.exports = [
       'web-build/**',
       '.expo/**',
       'assets/**',
-      // Bundle généré.
+      // Generated bundle.
       'src/injections/generatedScripts.js',
     ],
   },
@@ -19,7 +19,7 @@ module.exports = [
   ...expoConfig,
 
   {
-    // Scripts Node CommonJS.
+    // Node CommonJS scripts.
     files: ['scripts/**/*.js'],
     languageOptions: {
       globals: {
@@ -29,12 +29,12 @@ module.exports = [
   },
 
   {
-    // Sources WebView ES5 avec global Moodle.
+    // ES5 WebView sources with the Moodle global.
     files: ['src/injections/source/**/*.js'],
     languageOptions: {
       globals: {
         M: 'readonly',
-        // Modules inlinés par esbuild au build.
+        // Modules inlined by esbuild at build time.
         ...globals.node,
       },
     },

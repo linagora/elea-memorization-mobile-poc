@@ -1,3 +1,7 @@
+// Root view: Éléa WebView + injection and message orchestration.
+// Composes the injected scripts (auto-login, cache, mobile), routes WebView→native
+// messages (Dev toggle, offline snapshot, logs) and falls back to the HTML snapshot on
+// network error.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

@@ -1,3 +1,6 @@
+// Script injected into the WebView: mobile adaptation.
+// Applies the mobile CSS (safe-area insets, viewport) and adds the DEV button to the
+// navigation bar, which asks native to open the tools panel (postMessage).
 (function() {
   var insetsTop = Number(window.__memoInsetsTop || 0);
 

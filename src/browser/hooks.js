@@ -1,3 +1,6 @@
+// React hooks for the browser layer:
+// - useDebugLogs: capped log console (MAX_DEBUG_LOGS), shown in the Dev panel;
+// - useOfflineSnapshot: persistence of the offline HTML snapshot via AsyncStorage.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MAX_DEBUG_LOGS, MEMORIZATION_OFFLINE_HTML_KEY } from './config';

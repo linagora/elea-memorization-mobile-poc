@@ -1,3 +1,6 @@
+// Builds the scripts to inject into the WebView: wraps each bundled script
+// (generatedScripts.js) with a preamble that sets the window.__memo* globals and a
+// try/catch that reports runtime errors to native ([INJECT]).
 import {
   AUTO_LOGIN_INJECTION_SCRIPT,
   CACHE_INJECTION_SCRIPT,
