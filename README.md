@@ -120,11 +120,13 @@ src/
     generatedScripts.js           [generated] minified scripts
     source/
       autoLogin.js                Moodle auto-login
-      cache.js                    Fetch patch, offline GET/SET, snapshot, queue drain
+      cache.js                    Fetch patch, offline GET/SET, snapshot
       dateUtils.js                Pure date helpers (shared, tested)
       dateUtils.test.js           Unit tests (node:test) for dateUtils
       setQueue.js                 FIFO queue of offline SETs (pure, tested)
       setQueue.test.js            Unit tests (node:test) for setQueue
+      syncQueue.js                Offline SET drain/resync (pure orchestration, tested)
+      syncQueue.test.js           Unit tests (node:test) for syncQueue
       mobile.js                   Mobile CSS, viewport, DEV button
   ui/
     browserView.jsx               WebView + injection/message orchestration
@@ -161,10 +163,14 @@ inlined by esbuild) and covered by `node:test`:
   (`data.time`), `normalize`/`toUnixMs` round-trip;
 - `setQueue.js` / `setQueue.test.js` — FIFO queue of offline `SET`s: robust
   parse/serialize, entry factory (minimal payload reconstruction, id/timestamp), enqueue
-  with a cap, and replay-body reconstruction with the live `sesskey`.
+  with a cap, and replay-body reconstruction with the live `sesskey`;
+- `syncQueue.js` / `syncQueue.test.js` — drain/resync of the offline `SET` queue: pure
+  orchestration driven by an injected `runtime` (queue read/write, network, cache, online
+  state, endpoint/`sesskey` resolution), replay in arrival order, dequeue only on
+  `success:true`, stop on the first error, single-drain lock.
 
-The browser-side orchestration (queue drain, `localStorage` storage, live `sesskey`) lives
-in `cache.js` and builds on these tested primitives.
+The browser-side glue (binding that `runtime` to `localStorage`, `window.fetch` and the
+live `sesskey`) lives in `cache.js` and builds on these tested primitives.
 
 ## Limits & directions (POC)
 
@@ -186,7 +192,7 @@ or native rendering of the key screens).
 ### Structural: the sync queue
 
 Conversely, **queuing and resynchronizing offline `SET`s** (`setQueue.js` +
-`syncPendingOfflineSet`) carries *offline-first* logic that is meant to last: a user action
+`syncQueue.js`) carries *offline-first* logic that is meant to last: a user action
 enqueued without a network, then replayed when connectivity returns, re-injecting the live
 `sesskey` and validating the `success:true` contract.
 
