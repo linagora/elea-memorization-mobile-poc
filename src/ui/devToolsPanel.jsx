@@ -1,3 +1,5 @@
+// Developer tools panel: "Force cache" toggle, navigation (back / forward / reload),
+// access to the module, and log console display.
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 

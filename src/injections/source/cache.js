@@ -111,8 +111,8 @@ function createRequestTools(runtime) {
   function buildCacheResponse(dateString) {
     if (!dateString) return null;
 
-    // Forme unique conforme au contrat : { success, data:{time}, message }. La SPA lit
-    // data.time (GET) et success (SET) ; rien d'autre n'est consommé.
+    // Single shape matching the contract: { success, data:{time}, message }. The SPA reads
+    // data.time (GET) and success (SET); nothing else is consumed.
     var payload = { success: true, data: { time: dateString }, message: '' };
 
     return new Response(JSON.stringify(payload), {
@@ -122,8 +122,8 @@ function createRequestTools(runtime) {
   }
 
   function buildOfflineErrorResponse() {
-    // Conforme au scénario alternatif: le SET hors ligne est mis en file localement
-    // mais on renvoie un résultat KO à la Singlepage (et non un faux succès).
+    // Per the alternative scenario: the offline SET is queued locally but we return a
+    // failure to the single-page app (not a fake success).
     var payload = { success: false, message: 'offline', data: {} };
     return new Response(JSON.stringify(payload), {
       status: 200,
@@ -438,8 +438,8 @@ function installOfflineUi() {
     function handleSet(event) {
       if (!canInstallOfflineUi()) return;
       stopEvent(event);
-      // Secondes (Unix 10 chiffres), comme la SPA (local_memorization.js) et le serveur :
-      // évite d'introduire un format millisecondes dans le cache et la file.
+      // Seconds (10-digit Unix), like the SPA and the server: avoids introducing a
+      // millisecond format into the cache and the queue.
       var nowSeconds = Math.floor(Date.now() / 1000);
 
       runtime.writeCachedDate(nowSeconds);
@@ -511,9 +511,9 @@ async function postReplaySet(runtime, endpointUrl, sesskey, entry) {
     return { ok: false, reason: 'status=' + response.status };
   }
 
-  // Un HTTP 200 ne garantit pas la prise en compte côté serveur (ex: échec CSRF rendu
-  // en 200). On valide le contrat success:true avant de défiler l'entrée, sous peine de
-  // perdre silencieusement la donnée.
+  // An HTTP 200 does not guarantee server-side acceptance (e.g. a CSRF failure rendered
+  // as 200). We validate the success:true contract before dequeuing, otherwise the data
+  // would be silently lost.
   var json = null;
   try {
     json = await response.json();
@@ -531,8 +531,8 @@ async function postReplaySet(runtime, endpointUrl, sesskey, entry) {
 async function syncPendingOfflineSet(runtime) {
   if (runtime.isForceCacheEnabled()) return false;
   if (navigator.onLine === false) return false;
-  // Un seul drain à la fois : évite de rejouer deux fois la même entrée si plusieurs
-  // déclencheurs (événement `online`, démarrage, toggle Force cache) se chevauchent.
+  // One drain at a time: avoids replaying the same entry twice when several triggers
+  // (the `online` event, startup, Force cache toggle) overlap.
   if (runtime.syncInProgress) return false;
   runtime.syncInProgress = true;
 
@@ -544,11 +544,11 @@ async function syncPendingOfflineSet(runtime) {
     var sesskey = readLiveSesskey();
     var syncedCount = 0;
 
-    // File FIFO : on rejoue les SET dans l'ordre d'arrivée et on ne défile une entrée
-    // qu'après confirmation success:true du serveur. À la première erreur (réseau ou
-    // rejet), on s'arrête en conservant l'entrée en tête et toutes les suivantes, pour
-    // préserver l'ordre et ne perdre aucune donnée. La gestion de conflits (un SET plus
-    // récent ayant déjà écrasé la valeur côté serveur) est volontairement hors périmètre.
+    // FIFO queue: replay SETs in arrival order and dequeue an entry only after the server
+    // confirms success:true. On the first error (network or rejection), stop and keep the
+    // head entry and all the following ones, to preserve order and lose no data. Conflict
+    // handling (a more recent SET having already overwritten the server-side value) is
+    // deliberately out of scope.
     while (remaining.length) {
       var entry = remaining[0];
       var result = await postReplaySet(runtime, endpointUrl, sesskey, entry);
@@ -626,9 +626,9 @@ async function handleEndpointRequest(runtime, thisArg, args, input, init) {
   try {
     var response = await runtime.originalFetch.apply(thisArg, args);
     if (method === 'POST') {
-      // Un HTTP 200 ne garantit pas la prise en compte serveur (ex: échec CSRF rendu
-      // en 200). On valide le contrat success/false ; en cas de rejet alors que le serveur
-      // est joignable, on enfile pour rejouer plus tard plutôt que de perdre l'action.
+      // An HTTP 200 does not guarantee server-side acceptance (e.g. a CSRF failure rendered
+      // as 200). We validate the success flag; if rejected while the server is reachable,
+      // we enqueue for a later replay rather than lose the action.
       var accepted = false;
       if (response.ok) {
         try {
@@ -646,8 +646,8 @@ async function handleEndpointRequest(runtime, thisArg, args, input, init) {
     return response;
   } catch (error) {
     if (method === 'POST') {
-      // SET hors ligne : la date est déjà en cache, on enfile la requête pour la resync
-      // et on renvoie un résultat KO (cf. diagramme "Scénarios Alternatifs").
+      // Offline SET: the date is already cached, we enqueue the request for resync and
+      // return a failure (see the "Alternative scenarios" diagram).
       var offlineEntry = runtime.enqueuePendingSet({ date: postDate, body: requestBodyText });
       runtime.post('SET offline, queued date=' + offlineEntry.date + ', ' + runtime.pendingSetCount() + ' in queue');
       return runtime.buildOfflineErrorResponse();
