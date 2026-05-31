@@ -84,12 +84,6 @@ function createDateCacheTools(runtime) {
     return entry;
   }
 
-  function clearPendingSetQueue() {
-    try {
-      localStorage.removeItem(runtime.pendingSetQueueKey);
-    } catch (e) {}
-  }
-
   function pendingSetCount() {
     return readPendingSetQueue().length;
   }
@@ -102,7 +96,6 @@ function createDateCacheTools(runtime) {
     readPendingSetQueue: readPendingSetQueue,
     writePendingSetQueue: writePendingSetQueue,
     enqueuePendingSet: enqueuePendingSet,
-    clearPendingSetQueue: clearPendingSetQueue,
     pendingSetCount: pendingSetCount,
     extractDateFromBody: extractDateFromBody,
     extractDateFromJson: extractDateFromJson,
@@ -543,12 +536,16 @@ async function handleEndpointRequest(runtime, thisArg, args, input, init) {
     postDate = trySyncDateFromPostBody(runtime, requestBody);
   }
 
+  if (method === 'POST' && runtime.isForceCacheEnabled()) {
+    // Force cache simulates offline: queue the SET and report KO to the SPA, like the real
+    // offline branch. The alternative scenario returns a failure, not a fake success.
+    var forcedEntry = runtime.enqueuePendingSet({ date: postDate, body: requestBodyText });
+    runtime.post('SET queued (force cache) date=' + forcedEntry.date + ', ' + runtime.pendingSetCount() + ' in queue');
+    return runtime.buildOfflineErrorResponse();
+  }
+
   var forcedResponse = tryServeForcedCache(runtime, method);
   if (forcedResponse) {
-    if (method === 'POST') {
-      var forcedEntry = runtime.enqueuePendingSet({ date: postDate, body: requestBodyText });
-      runtime.post('SET queued (force cache) date=' + forcedEntry.date + ', ' + runtime.pendingSetCount() + ' in queue');
-    }
     return forcedResponse;
   }
 
