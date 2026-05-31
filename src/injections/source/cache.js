@@ -1,9 +1,21 @@
+var dateUtils = require('./dateUtils');
+var formatDate = dateUtils.formatDate;
+var normalizeDateString = dateUtils.normalizeDateString;
+var extractDateFromBody = dateUtils.extractDateFromBody;
+var extractDateFromJson = dateUtils.extractDateFromJson;
+
+var setQueue = require('./setQueue');
+var parseQueue = setQueue.parseQueue;
+var serializeQueue = setQueue.serializeQueue;
+var makeSetEntry = setQueue.makeSetEntry;
+var enqueue = setQueue.enqueue;
+var buildReplayBody = setQueue.buildReplayBody;
+
 function applyRuntimeConstants(runtime) {
   runtime.endpointPath = '/local/memorization/ajax/ajax.php';
   runtime.memorizationPath = '/local/memorization/index.php';
   runtime.cacheKey = '__memo_last_date_string__';
-  runtime.pendingSetKey = '__memo_pending_set_date_string__';
-  runtime.lastSetBodyKey = '__memo_last_set_body__';
+  runtime.pendingSetQueueKey = '__memo_pending_set_queue_v1__';
   runtime.baseUrl = typeof window.__memoBaseUrl === 'string' ? window.__memoBaseUrl : '';
   runtime.snapshotMessagePrefix = '[OFFLINE_HTML] ';
 }
@@ -32,35 +44,6 @@ function initializeForceCacheFlag() {
 }
 
 function createDateCacheTools(runtime) {
-  function formatDate(date) {
-    var pad = function(n) {
-      return String(n).padStart(2, '0');
-    };
-
-    return (
-      date.getFullYear() +
-      '/' +
-      pad(date.getMonth() + 1) +
-      '/' +
-      pad(date.getDate()) +
-      ' ' +
-      pad(date.getHours()) +
-      ':' +
-      pad(date.getMinutes()) +
-      ':' +
-      pad(date.getSeconds())
-    );
-  }
-
-  function normalizeDateString(value) {
-    if (value === undefined || value === null) return '';
-    var raw = String(value).trim();
-    if (!raw) return '';
-    if (/^\d{10}$/.test(raw)) return formatDate(new Date(Number(raw) * 1000));
-    if (/^\d{13}$/.test(raw)) return formatDate(new Date(Number(raw)));
-    return raw;
-  }
-
   function readCachedDate() {
     try {
       return localStorage.getItem(runtime.cacheKey) || '';
@@ -78,76 +61,35 @@ function createDateCacheTools(runtime) {
     return normalized;
   }
 
-  function readPendingSetDate() {
+  function readPendingSetQueue() {
     try {
-      return localStorage.getItem(runtime.pendingSetKey) || '';
+      return parseQueue(localStorage.getItem(runtime.pendingSetQueueKey));
     } catch (e) {
-      return '';
+      return [];
     }
   }
 
-  function writePendingSetDate(value) {
-    var normalized = normalizeDateString(value);
-    if (!normalized) return '';
+  function writePendingSetQueue(queue) {
     try {
-      localStorage.setItem(runtime.pendingSetKey, normalized);
+      localStorage.setItem(runtime.pendingSetQueueKey, serializeQueue(queue));
     } catch (e) {}
-    return normalized;
+    return Array.isArray(queue) ? queue : [];
   }
 
-  function clearPendingSetDate() {
-    try {
-      localStorage.removeItem(runtime.pendingSetKey);
-    } catch (e) {}
+  function enqueuePendingSet(options) {
+    var entry = makeSetEntry(options);
+    writePendingSetQueue(enqueue(readPendingSetQueue(), entry));
+    return entry;
   }
 
-  function readLastSetBody() {
+  function clearPendingSetQueue() {
     try {
-      return localStorage.getItem(runtime.lastSetBodyKey) || '';
-    } catch (e) {
-      return '';
-    }
-  }
-
-  function writeLastSetBody(value) {
-    if (!value) return;
-    try {
-      localStorage.setItem(runtime.lastSetBodyKey, String(value));
+      localStorage.removeItem(runtime.pendingSetQueueKey);
     } catch (e) {}
   }
 
-  function extractDateFromBody(body) {
-    if (!body) return '';
-
-    try {
-      var text = typeof body === 'string' ? body : typeof body.toString === 'function' ? body.toString() : '';
-      var params = new URLSearchParams(text);
-      return normalizeDateString(params.get('time') || params.get('date'));
-    } catch (e) {
-      return '';
-    }
-  }
-
-  function extractDateFromJson(json) {
-    if (!json) return '';
-    if (typeof json === 'string') return normalizeDateString(json);
-
-    var candidates = [
-      json.time,
-      json.date,
-      json.value,
-      json.data && json.data.time,
-      json.data && json.data.date,
-      json.result && json.result.time,
-      json.result && json.result.date,
-    ];
-
-    for (var i = 0; i < candidates.length; i += 1) {
-      var normalized = normalizeDateString(candidates[i]);
-      if (normalized) return normalized;
-    }
-
-    return '';
+  function pendingSetCount() {
+    return readPendingSetQueue().length;
   }
 
   return {
@@ -155,25 +97,34 @@ function createDateCacheTools(runtime) {
     normalizeDateString: normalizeDateString,
     readCachedDate: readCachedDate,
     writeCachedDate: writeCachedDate,
-    readPendingSetDate: readPendingSetDate,
-    writePendingSetDate: writePendingSetDate,
-    clearPendingSetDate: clearPendingSetDate,
-    readLastSetBody: readLastSetBody,
-    writeLastSetBody: writeLastSetBody,
+    readPendingSetQueue: readPendingSetQueue,
+    writePendingSetQueue: writePendingSetQueue,
+    enqueuePendingSet: enqueuePendingSet,
+    clearPendingSetQueue: clearPendingSetQueue,
+    pendingSetCount: pendingSetCount,
     extractDateFromBody: extractDateFromBody,
     extractDateFromJson: extractDateFromJson,
   };
 }
 
 function createRequestTools(runtime) {
-  function buildCacheResponse(method, dateString) {
+  function buildCacheResponse(dateString) {
     if (!dateString) return null;
 
-    var payload =
-      method === 'POST'
-        ? { success: true, result: 'OK', date: dateString, time: dateString }
-        : { success: true, date: dateString, time: dateString, data: { date: dateString, time: dateString } };
+    // Forme unique conforme au contrat : { success, data:{time}, message }. La SPA lit
+    // data.time (GET) et success (SET) ; rien d'autre n'est consommé.
+    var payload = { success: true, data: { time: dateString }, message: '' };
 
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    });
+  }
+
+  function buildOfflineErrorResponse() {
+    // Conforme au scénario alternatif: le SET hors ligne est mis en file localement
+    // mais on renvoie un résultat KO à la Singlepage (et non un faux succès).
+    var payload = { success: false, message: 'offline', data: {} };
     return new Response(JSON.stringify(payload), {
       status: 200,
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
@@ -212,6 +163,7 @@ function createRequestTools(runtime) {
 
   return {
     buildCacheResponse: buildCacheResponse,
+    buildOfflineErrorResponse: buildOfflineErrorResponse,
     getRequestUrl: getRequestUrl,
     getRequestMethod: getRequestMethod,
     getRequestBody: getRequestBody,
@@ -233,59 +185,13 @@ function resolveEndpointUrlForSync(runtime) {
   return runtime.endpointPath;
 }
 
-function toUnixMs(value) {
-  if (value === undefined || value === null) return 0;
-  var raw = String(value).trim();
-  if (!raw) return 0;
-  if (/^\d{13}$/.test(raw)) return Number(raw);
-  if (/^\d{10}$/.test(raw)) return Number(raw) * 1000;
-  var match = raw.match(/^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
-  if (match) {
-    return new Date(
-      Number(match[1]),
-      Number(match[2]) - 1,
-      Number(match[3]),
-      Number(match[4]),
-      Number(match[5]),
-      Number(match[6])
-    ).getTime();
-  }
-  var parsed = Date.parse(raw);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function buildSyncSetBody(runtime, pendingDate) {
-  var pendingMs = toUnixMs(pendingDate) || Date.now();
-  var pendingSec = Math.floor(pendingMs / 1000);
-  var params = new URLSearchParams(runtime.readLastSetBody() || '');
-  var keys = ['time', 'date', 'value', 'timestamp'];
-  var updated = false;
-
-  for (var i = 0; i < keys.length; i += 1) {
-    var key = keys[i];
-    if (!params.has(key)) continue;
-
-    var currentValue = String(params.get(key) || '').trim();
-    if (/^\d{13}$/.test(currentValue)) {
-      params.set(key, String(pendingMs));
-      updated = true;
-      continue;
+function readLiveSesskey() {
+  try {
+    if (window.M && window.M.cfg && window.M.cfg.sesskey) {
+      return String(window.M.cfg.sesskey);
     }
-    if (/^\d{10}$/.test(currentValue)) {
-      params.set(key, String(pendingSec));
-      updated = true;
-      continue;
-    }
-    params.set(key, runtime.normalizeDateString(pendingDate));
-    updated = true;
-  }
-
-  if (!updated) {
-    params.set('time', String(pendingSec));
-    params.set('date', String(pendingSec));
-  }
-
-  return params.toString();
+  } catch (e) {}
+  return '';
 }
 
 function createSnapshotTools(runtime) {
@@ -532,11 +438,14 @@ function installOfflineUi() {
     function handleSet(event) {
       if (!canInstallOfflineUi()) return;
       stopEvent(event);
-      var dateString = Date.now();
+      // Secondes (Unix 10 chiffres), comme la SPA (local_memorization.js) et le serveur :
+      // évite d'introduire un format millisecondes dans le cache et la file.
+      var nowSeconds = Math.floor(Date.now() / 1000);
 
-      runtime.writeCachedDate(dateString);
-      runtime.writePendingSetDate(dateString);
-      setContent(dateString);
+      runtime.writeCachedDate(nowSeconds);
+      var entry = runtime.enqueuePendingSet({ date: nowSeconds });
+      setContent(entry.date);
+      runtime.post('SET queued offline date=' + entry.date + ', ' + runtime.pendingSetCount() + ' in queue');
     }
 
     nodes.getButton.addEventListener('click', handleGet, true);
@@ -583,36 +492,84 @@ function trySyncDateFromPostBody(runtime, requestBody) {
   return bodyDate;
 }
 
-async function syncPendingOfflineSet(runtime) {
-  if (runtime.isForceCacheEnabled()) return false;
-  if (navigator.onLine === false) return false;
+async function postReplaySet(runtime, endpointUrl, sesskey, entry) {
+  var body = buildReplayBody(entry.body, sesskey);
 
-  var pendingDate = runtime.readPendingSetDate();
-  if (!pendingDate) return false;
-
+  var response;
   try {
-    var requestBody = buildSyncSetBody(runtime, pendingDate);
-    var endpointUrl = resolveEndpointUrlForSync(runtime);
-
-    var response = await runtime.originalFetch(endpointUrl, {
+    response = await runtime.originalFetch(endpointUrl, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-      body: requestBody,
+      body: body,
     });
+  } catch (e) {
+    return { ok: false, reason: 'network' };
+  }
 
-    if (!response.ok) {
-      runtime.post('SET sync failed status=' + response.status);
-      return false;
+  if (!response.ok) {
+    return { ok: false, reason: 'status=' + response.status };
+  }
+
+  // Un HTTP 200 ne garantit pas la prise en compte côté serveur (ex: échec CSRF rendu
+  // en 200). On valide le contrat success:true avant de défiler l'entrée, sous peine de
+  // perdre silencieusement la donnée.
+  var json = null;
+  try {
+    json = await response.json();
+  } catch (e) {
+    json = null;
+  }
+
+  if (!json || json.success !== true) {
+    return { ok: false, reason: 'rejected' + (json && json.message ? ' (' + json.message + ')' : '') };
+  }
+
+  return { ok: true };
+}
+
+async function syncPendingOfflineSet(runtime) {
+  if (runtime.isForceCacheEnabled()) return false;
+  if (navigator.onLine === false) return false;
+  // Un seul drain à la fois : évite de rejouer deux fois la même entrée si plusieurs
+  // déclencheurs (événement `online`, démarrage, toggle Force cache) se chevauchent.
+  if (runtime.syncInProgress) return false;
+  runtime.syncInProgress = true;
+
+  try {
+    var remaining = runtime.readPendingSetQueue();
+    if (!remaining.length) return false;
+
+    var endpointUrl = resolveEndpointUrlForSync(runtime);
+    var sesskey = readLiveSesskey();
+    var syncedCount = 0;
+
+    // File FIFO : on rejoue les SET dans l'ordre d'arrivée et on ne défile une entrée
+    // qu'après confirmation success:true du serveur. À la première erreur (réseau ou
+    // rejet), on s'arrête en conservant l'entrée en tête et toutes les suivantes, pour
+    // préserver l'ordre et ne perdre aucune donnée. La gestion de conflits (un SET plus
+    // récent ayant déjà écrasé la valeur côté serveur) est volontairement hors périmètre.
+    while (remaining.length) {
+      var entry = remaining[0];
+      var result = await postReplaySet(runtime, endpointUrl, sesskey, entry);
+
+      if (!result.ok) {
+        runtime.writePendingSetQueue(remaining);
+        runtime.post('SET sync stopped (' + result.reason + '), ' + remaining.length + ' left in queue');
+        return syncedCount > 0;
+      }
+
+      remaining = remaining.slice(1);
+      runtime.writePendingSetQueue(remaining);
+      if (entry.date) runtime.writeCachedDate(entry.date);
+      syncedCount += 1;
+      runtime.post('SET synced date=' + entry.date + ', ' + remaining.length + ' left in queue');
     }
 
-    runtime.writeCachedDate(pendingDate);
-    runtime.clearPendingSetDate();
-    runtime.post('SET synced after offline date=' + pendingDate);
-    return true;
-  } catch (e) {
-    runtime.post('SET sync failed network');
-    return false;
+    runtime.post('SET queue drained (' + syncedCount + ' synced)');
+    return syncedCount > 0;
+  } finally {
+    runtime.syncInProgress = false;
   }
 }
 
@@ -622,7 +579,7 @@ function tryServeForcedCache(runtime, method) {
   var forcedDate = runtime.readCachedDate();
   if (forcedDate) {
     runtime.post(method + ' forced cache hit');
-    return runtime.buildCacheResponse(method, forcedDate);
+    return runtime.buildCacheResponse(forcedDate);
   }
 
   runtime.post(method + ' forced cache miss');
@@ -644,7 +601,7 @@ function tryFallbackToCache(runtime, method) {
   var fallbackDate = runtime.readCachedDate();
   if (!fallbackDate) return null;
   runtime.post(method + ' network fallback cache hit');
-  return runtime.buildCacheResponse(method, fallbackDate);
+  return runtime.buildCacheResponse(fallbackDate);
 }
 
 async function handleEndpointRequest(runtime, thisArg, args, input, init) {
@@ -654,29 +611,47 @@ async function handleEndpointRequest(runtime, thisArg, args, input, init) {
   var postDate = '';
 
   if (method === 'POST') {
-    if (requestBodyText) runtime.writeLastSetBody(requestBodyText);
     postDate = trySyncDateFromPostBody(runtime, requestBody);
   }
 
   var forcedResponse = tryServeForcedCache(runtime, method);
   if (forcedResponse) {
-    if (method === 'POST' && postDate) runtime.writePendingSetDate(postDate);
+    if (method === 'POST') {
+      var forcedEntry = runtime.enqueuePendingSet({ date: postDate, body: requestBodyText });
+      runtime.post('SET queued (force cache) date=' + forcedEntry.date + ', ' + runtime.pendingSetCount() + ' in queue');
+    }
     return forcedResponse;
   }
 
   try {
     var response = await runtime.originalFetch.apply(thisArg, args);
-    if (method === 'POST' && postDate) {
+    if (method === 'POST') {
+      // Un HTTP 200 ne garantit pas la prise en compte serveur (ex: échec CSRF rendu
+      // en 200). On valide le contrat success/false ; en cas de rejet alors que le serveur
+      // est joignable, on enfile pour rejouer plus tard plutôt que de perdre l'action.
+      var accepted = false;
       if (response.ok) {
-        runtime.clearPendingSetDate();
-      } else {
-        runtime.writePendingSetDate(postDate);
+        try {
+          accepted = (await response.clone().json()).success === true;
+        } catch (e) {
+          accepted = false;
+        }
+      }
+      if (!accepted) {
+        var rejectedEntry = runtime.enqueuePendingSet({ date: postDate, body: requestBodyText });
+        runtime.post('SET rejected live, queued date=' + rejectedEntry.date + ', ' + runtime.pendingSetCount() + ' in queue');
       }
     }
     await trySyncDateFromNetwork(runtime, method, response);
     return response;
   } catch (error) {
-    if (method === 'POST' && postDate) runtime.writePendingSetDate(postDate);
+    if (method === 'POST') {
+      // SET hors ligne : la date est déjà en cache, on enfile la requête pour la resync
+      // et on renvoie un résultat KO (cf. diagramme "Scénarios Alternatifs").
+      var offlineEntry = runtime.enqueuePendingSet({ date: postDate, body: requestBodyText });
+      runtime.post('SET offline, queued date=' + offlineEntry.date + ', ' + runtime.pendingSetCount() + ' in queue');
+      return runtime.buildOfflineErrorResponse();
+    }
     var fallbackResponse = tryFallbackToCache(runtime, method);
     if (fallbackResponse) return fallbackResponse;
     throw error;
