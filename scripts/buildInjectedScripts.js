@@ -1,3 +1,6 @@
+// Builds the injected scripts: bundles + minifies each source in src/injections/source
+// (cache, autoLogin, mobile) with esbuild and writes them as exported constants in
+// src/injections/generatedScripts.js (generated file, do not edit by hand).
 const fs = require('fs');
 const path = require('path');
 const esbuild = require('esbuild');

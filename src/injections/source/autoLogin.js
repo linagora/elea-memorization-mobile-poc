@@ -1,3 +1,7 @@
+// Script injected into the WebView: Moodle auto-login.
+// On the login page, reads the logintoken (the form's CSRF token), POSTs the credentials,
+// then redirects to the Memorization module. Inactive outside the login page or when no
+// credentials are provided.
 (function() {
   if (window.__memoAutoLoginInstalled) return;
   window.__memoAutoLoginInstalled = true;
@@ -25,6 +29,8 @@
     }
     if (window.__memoAutoLoginSubmitted) return;
 
+    // The logintoken (CSRF token) is rendered with the form: it may be absent on the
+    // first pass, so we retry until it is available before posting.
     var tokenInput = document.querySelector('input[name="logintoken"]');
     var loginToken = tokenInput && tokenInput.value ? tokenInput.value : '';
     if (!loginToken) {
