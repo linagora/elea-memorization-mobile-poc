@@ -79,9 +79,6 @@ export function BrowserView() {
 
     webViewRef.current.injectJavaScript(`
       window.__memoForceCache = ${forceCache ? 'true' : 'false'};
-      if (window.__memoCacheRuntime && typeof window.__memoCacheRuntime.installOfflineUiHandlers === 'function') {
-        window.__memoCacheRuntime.installOfflineUiHandlers();
-      }
       if (!window.__memoForceCache && window.__memoCacheRuntime && typeof window.__memoCacheRuntime.syncPendingOfflineSet === 'function') {
         window.__memoCacheRuntime.syncPendingOfflineSet();
       }

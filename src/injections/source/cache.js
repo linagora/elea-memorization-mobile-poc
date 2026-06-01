@@ -377,106 +377,14 @@ function installCacheRuntime() {
 
   window.__memoCacheRuntime = runtime;
   setTimeout(runtime.syncPendingOfflineSet, 0);
+  // Drain the offline SET queue on reconnection (and at startup, above).
+  window.addEventListener('online', runtime.syncPendingOfflineSet);
 
   if (document.readyState === 'complete') {
     runtime.scheduleSnapshotCapture();
   } else {
     window.addEventListener('load', runtime.scheduleSnapshotCapture, { once: true });
   }
-}
-
-function installOfflineUi() {
-  var runtime = window.__memoCacheRuntime;
-  if (!runtime) return;
-  if (window.__memoOfflineUiInstalled) return;
-  window.__memoOfflineUiInstalled = true;
-
-  function canInstallOfflineUi() {
-    return runtime.isForceCacheEnabled() || navigator.onLine === false;
-  }
-
-  function getUiNodes() {
-    var getButton = document.getElementById('memorization-get');
-    var setButton = document.getElementById('memorization-set');
-    var contentNode = document.getElementById('memorization-content');
-    if (!getButton || !setButton || !contentNode) return null;
-    return { getButton: getButton, setButton: setButton, contentNode: contentNode };
-  }
-
-  function stopEvent(event) {
-    if (!event) return;
-    event.preventDefault();
-    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
-    event.stopPropagation();
-  }
-
-  function resolveDateFromJson(json) {
-    return runtime.extractDateFromJson(json) || runtime.readCachedDate();
-  }
-
-  function installOfflineUiHandlers() {
-    if (runtime.offlineUiInstalled) return;
-    if (!canInstallOfflineUi()) return;
-
-    var nodes = getUiNodes();
-    if (!nodes) return;
-
-    function setContent(value) {
-      nodes.contentNode.textContent = runtime.normalizeDateString(value) || '';
-    }
-
-    async function handleGet(event) {
-      if (!canInstallOfflineUi()) return;
-      stopEvent(event);
-      try {
-        var response = await window.fetch(runtime.endpointPath, { method: 'GET', credentials: 'include' });
-        var dateString = resolveDateFromJson(await response.json());
-        if (dateString) setContent(dateString);
-      } catch (e) {
-        var fallbackDate = runtime.readCachedDate();
-        if (fallbackDate) setContent(fallbackDate);
-      }
-    }
-
-    function handleSet(event) {
-      if (!canInstallOfflineUi()) return;
-      stopEvent(event);
-      // Seconds (10-digit Unix), like the SPA and the server: avoids introducing a
-      // millisecond format into the cache and the queue.
-      var nowSeconds = Math.floor(Date.now() / 1000);
-
-      runtime.writeCachedDate(nowSeconds);
-      var entry = runtime.enqueuePendingSet({ date: nowSeconds });
-      setContent(entry.date);
-      runtime.post('SET queued offline date=' + entry.date + ', ' + runtime.pendingSetCount() + ' in queue');
-    }
-
-    nodes.getButton.addEventListener('click', handleGet, true);
-    nodes.setButton.addEventListener('click', handleSet, true);
-
-    runtime.offlineUiInstalled = true;
-    runtime.post('offline GET/SET handlers installed');
-  }
-
-  runtime.installOfflineUiHandlers = installOfflineUiHandlers;
-
-  function scheduleOfflineUiInstall() {
-    installOfflineUiHandlers();
-    setTimeout(installOfflineUiHandlers, 250);
-    setTimeout(installOfflineUiHandlers, 800);
-    setTimeout(installOfflineUiHandlers, 1600);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scheduleOfflineUiInstall, { once: true });
-  } else {
-    scheduleOfflineUiInstall();
-  }
-
-  window.addEventListener('offline', installOfflineUiHandlers);
-  window.addEventListener('online', function() {
-    if (runtime.syncPendingOfflineSet) runtime.syncPendingOfflineSet();
-  });
 }
 
 async function handlePassthroughRequest(runtime, thisArg, args, requestUrl) {
@@ -608,6 +516,5 @@ function installFetchPatch() {
 
 (function() {
   installCacheRuntime();
-  installOfflineUi();
   installFetchPatch();
 })();
