@@ -106,9 +106,8 @@ function createRequestTools(runtime) {
   function buildCacheResponse(dateString) {
     if (!dateString) return null;
 
-    // Single shape matching the contract: { success, data:{time}, message }. The SPA reads
-    // data.time (GET) and success (SET); nothing else is consumed.
-    var payload = { success: true, data: { time: dateString }, message: '' };
+    // The live Éléa module reads a top-level `time`; data.time keeps the documented contract.
+    var payload = { success: true, time: dateString, data: { time: dateString }, message: '' };
 
     return new Response(JSON.stringify(payload), {
       status: 200,
