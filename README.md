@@ -62,6 +62,19 @@ If credentials are absent, auto-login is disabled and the SPA stays usable via m
 > is acceptable for a **POC test account only**. Production auth (short-lived token,
 > OAuth/SSO, secure native storage) is a known follow-up.
 
+### Test sur téléphone avec Expo Go
+
+Ce projet utilise Expo SDK 54. Installez une version d’Expo Go compatible avec le SDK 54
+depuis <https://expo.dev/go>.
+
+Configuration validée pour la démonstration :
+
+- Expo Go 54.0.8
+- Android 15
+- téléphone physique
+
+La version la plus récente d’Expo Go ne prend pas en charge le SDK 54.
+
 ## Features
 
 - **Auto-login** (`autoLogin.js`) reads the `logintoken` (CSRF), POSTs the credentials,
